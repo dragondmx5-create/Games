@@ -1,0 +1,68 @@
+name: Build installable Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: Public HTTPS URL of the UNDRAL API (for example https://api.example.com)
+        required: true
+        type: string
+      app_hostname:
+        description: Virtual app origin allowed by the backend (for example app.example.com)
+        required: true
+        default: app.undral.game
+        type: string
+
+jobs:
+  android-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VITE_API_URL: ${{ inputs.api_url }}
+      CAPACITOR_HOSTNAME: ${{ inputs.app_hostname }}
+
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install JavaScript dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify and bundle the game
+        run: |
+          npm run check:authority
+          npm test -- --run
+          npm run build
+          npx cap sync android
+
+      - name: Build installable debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: undral-android-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

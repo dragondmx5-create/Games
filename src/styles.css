@@ -1,0 +1,9 @@
+/* UI styles, split by area and re-assembled here in source order so the
+   cascade is byte-for-byte identical to the original single file.
+   Edit the parts in styles/, not this file. */
+@import './styles/base.css';
+@import './styles/hud.css';
+@import './styles/panels.css';
+@import './styles/world.css';
+@import './styles/economy.css';
+@import './styles/feed.css';

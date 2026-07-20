@@ -1,0 +1,704 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  username      String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  refreshTokens RefreshToken[]
+  save          SaveGame?
+  redZone       RedZonePlayer?
+  saveAudits    SaveAudit[]
+  vaultClaims   VaultClaim[]
+  inventory     PlayerInventory?
+  worldPosition PlayerWorldPosition?
+  combatState   PlayerCombatState?
+  underworldState PlayerUnderworldState?
+  enemyKills    WorldEnemyKill[]
+  ownedLootBags WorldLootBag[] @relation("LootBagOwner")
+  claimedLootBags WorldLootBag[] @relation("LootBagClaimer")
+  questProgress PlayerQuestProgress[]
+  questEvents PlayerQuestEvent[]
+  storyQuests PlayerStoryQuest[]
+  npcInteractionReceipts NpcInteractionReceipt[]
+  farmPlots PlayerFarmPlot[]
+  animalStates PlayerAnimalState[]
+  dungeonRuns DungeonRun[]
+  dungeonCommands DungeonCommand[]
+  dungeonReceipts DungeonFloorReceipt[]
+  dungeonVaultProofs DungeonVaultProof[]
+  pvpSessions PvpSession[]
+  pvpCommands PvpCommand[]
+  pvpDeathVictims PvpDeathReceipt[] @relation("PvpDeathVictim")
+  pvpDeathKillers PvpDeathReceipt[] @relation("PvpDeathKiller")
+  marketListings MarketListing[] @relation("MarketSeller")
+  marketPurchases MarketListing[] @relation("MarketBuyer")
+  initiatedTrades PlayerTradeSession[] @relation("TradeInitiator")
+  receivedTrades PlayerTradeSession[] @relation("TradeTarget")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String // sha256 of the raw token, never store the raw token
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // when `revoked` flipped — used to distinguish a same-token race between tabs from real reuse (auth/routes.ts's /refresh)
+
+  @@index([userId])
+  // every /refresh and /logout looks tokens up by hash — without this index
+  // each one was a sequential scan that got slower with every issued token
+  @@index([tokenHash])
+}
+
+model SaveGame {
+  id        String   @id @default(uuid())
+  userId    String   @unique // one save slot per account, phase 1
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data      Json // SaveData blob — see src/save.ts in the game project for the shape
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+// The ONE global world seed every player shares — the surface overworld
+// (docs/REGION_WORLD_PLAN.md) generates deterministically from it, so all
+// players walk the same world. Single row (id always 1), created lazily on
+// the first GET /api/world and stable forever after; changing it resets
+// everyone's explored world (clients drop their region mutations when the
+// seed in their save no longer matches — see src/save.ts migrateSave).
+model WorldConfig {
+  id        Int @id @default(1)
+  worldSeed Int
+}
+
+// Shared prize pools (Cambria-style loot economy) — see
+// server/src/vault/routes.ts. Layers 1 and 5 can only be claimed with an
+// unconsumed server-authored DungeonVaultProof. Legacy client bags contribute
+// zero. Layer 0 receives the server-settled PvP crystal share from
+// Fracture/Lost deaths. It remains a guarded pool without a public generic
+// claim path.
+model Vault {
+  layer    Int @id
+  crystals Int @default(0)
+}
+
+
+model VaultClaim {
+  id        String   @id @default(uuid())
+  runKey    String   @unique // dungeon-proof:<DungeonVaultProof.id>
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  layer     Int
+  claimed   Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Legacy pre-authority Red Zone balance. It is retained only for migration
+// and the isolated internal-ledger scaffold. Active Fracture/Lost gameplay
+// never reads or writes this model; it carries canonical PlayerInventory
+// through PvpSession and settles with InventoryService.
+model RedZonePlayer {
+  userId   String @id
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  crystals Int    @default(0)
+}
+
+// Trust-but-record anti-cheat (docs/ONLINE_CRYPTO_ROADMAP.md Phase 4 step
+// zero): PUT /api/save still accepts anything the zod schema allows, but
+// suspicious transitions — lifetime stats going backwards, crystal wealth
+// growing implausibly fast for the elapsed time — leave a row here instead
+// of being silently swallowed. Flag-only on purpose: legitimate players
+// must never lose a save to a false positive (e.g. NEW GAME on a fresh
+// device legitimately lowers localStorage-sourced lifetime stats), but the
+// moment crystals are worth anything, this table is the evidence trail.
+model SaveAudit {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade) // account deletion removes audits too — DELETE /me's "everything cascades" promise stays true
+  kind      String // 'stats_regression' | 'implausible_gain'
+  detail    Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Idempotency ledger for the internal service-to-service API
+// (server/src/internal/) — a future crypto/token layer calls in to credit
+// or debit a player's Red Zone balance (e.g. converting on-chain tokens
+// into in-game crystals or vice versa). Network retries between two
+// separate services are expected, so every mutating call carries a caller-
+// supplied idempotencyKey; a repeat of the same key returns the original
+// result instead of applying the effect twice. This table is the only
+// state the internal API can mutate outside of RedZonePlayer/Vault, which
+// keeps the whole surface auditable — every credit/debit that ever
+// happened is one row here, kept even after the balance moves again.
+model InternalLedgerEntry {
+  id             String   @id @default(uuid())
+  idempotencyKey String   @unique
+  kind           String // e.g. "redzone_credit"
+  targetId       String // userId or vault layer, depending on kind
+  amount         Int // signed: positive = credit, negative = debit
+  resultBalance  Int // balance after this entry was applied
+  createdAt      DateTime @default(now())
+
+  @@index([targetId])
+}
+
+
+// Phase 4 foundation: canonical server-owned inventory. Gameplay services
+// mutate it only through server/src/inventory/service.ts, inside serializable
+// transactions. SaveGame remains during the staged migration but is no longer
+// the long-term source of truth for economic state.
+model PlayerInventory {
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revision        Int      @default(0)
+  progressionLevel Int     @default(1)
+  hasPet          Boolean  @default(false)
+  equippedWeapon  String   @default("weapon.bone")
+  migratedFromSave Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  stacks          InventoryStack[]
+  commands        InventoryCommand[]
+}
+
+model InventoryStack {
+  userId    String
+  itemId    String
+  quantity  Int
+  inventory PlayerInventory @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, itemId])
+  @@index([itemId])
+}
+
+// Every economic command is idempotent per account. requestHash prevents a
+// caller from reusing one key with a different payload; result stores the
+// exact response returned on safe retries.
+model InventoryCommand {
+  id             String   @id @default(uuid())
+  userId         String
+  inventory      PlayerInventory @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  idempotencyKey String
+  kind           String
+  requestHash    String
+  result         Json
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+}
+
+
+// Server-owned overworld position used by presence and economy validation.
+// SaveGame.pos is a presentation checkpoint only once this row exists.
+model PlayerWorldPosition {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rx        Int
+  ry        Int
+  x         Float
+  y         Float
+  sessionId String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Shared overworld resource state. Nodes are generated deterministically from
+// WorldConfig.worldSeed; rows are created lazily on first harvest and only
+// store mutable depletion/respawn state.
+model WorldResourceState {
+  nodeId            String   @id
+  worldSeed         Int
+  rx                Int
+  ry                Int
+  kind              String
+  availableAt       DateTime
+  harvestCount      Int      @default(0)
+  lastHarvestedBy   String?
+  updatedAt         DateTime @updatedAt
+
+  @@index([worldSeed, rx, ry])
+  @@index([availableAt])
+}
+
+
+// Shared multi-strike mineral veins. Definitions and coordinates are derived
+// from the world seed; only integrity/cooldown/extraction state is mutable.
+model WorldMiningState {
+  nodeId          String   @id
+  worldSeed       Int
+  rx              Int
+  ry              Int
+  kind            String
+  integrity       Int
+  availableAt     DateTime
+  extractionCount Int      @default(0)
+  lastMinedBy     String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([worldSeed, rx, ry])
+  @@index([availableAt])
+}
+
+
+// Shared deterministic overworld chests. Definitions are generated from the
+// global world seed; this table stores only mutable respawn/open state.
+model WorldChestState {
+  chestId       String   @id
+  worldSeed     Int
+  rx            Int
+  ry            Int
+  availableAt   DateTime
+  openCount     Int      @default(0)
+  lastOpenedBy  String?
+  updatedAt     DateTime @updatedAt
+
+  @@index([worldSeed, rx, ry])
+  @@index([availableAt])
+}
+
+// Server-authoritative overworld combat state. The websocket simulation is
+// ephemeral, but player health/progression/death tickets survive reconnects.
+model PlayerCombatState {
+  userId      String   @id
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hp          Int      @default(10)
+  maxHp       Int      @default(10)
+  xp          Int      @default(0)
+  level       Int      @default(1)
+  dead        Boolean  @default(false)
+  deathToken  String?  @unique
+  deaths      Int      @default(0)
+  kills       Int      @default(0)
+  basicReadyAt DateTime?
+  abilityReadyAt DateTime?
+  updatedAt   DateTime @updatedAt
+}
+
+
+
+// Durable mutable state for deterministic overworld enemies. The websocket
+// coordinator owns movement presentation, while this row owns HP, life
+// generation and respawn timing so restarts or multiple server processes
+// cannot mint rewards from the same enemy life twice.
+model WorldEnemyState {
+  enemyId       String   @id
+  worldSeed     Int
+  rx            Int
+  ry            Int
+  kind          String
+  generation    Int      @default(0)
+  hp            Int
+  respawnAt     DateTime?
+  lastKilledBy  String?
+  updatedAt     DateTime @updatedAt
+
+  @@index([worldSeed, rx, ry])
+  @@index([respawnAt])
+}
+
+// One durable receipt per authoritative enemy life. It prevents two clients
+// from receiving the same kill reward even when requests race or retry.
+model WorldEnemyKill {
+  lifeId      String   @id
+  enemyId     String
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  worldSeed   Int
+  rx          Int
+  ry          Int
+  kind        String
+  reward      Json
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([worldSeed, rx, ry])
+  @@index([worldSeed, rx, ry, enemyId, createdAt])
+}
+
+// Death bags are canonical server objects. Their contents are removed from
+// inventory in the same transaction that creates the bag, then claimed once.
+model WorldLootBag {
+  id           String   @id @default(uuid())
+  ownerUserId  String
+  owner        User     @relation("LootBagOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  claimedById  String?
+  claimedBy    User?    @relation("LootBagClaimer", fields: [claimedById], references: [id], onDelete: SetNull)
+  worldSeed    Int
+  rx           Int
+  ry           Int
+  x            Float
+  y            Float
+  items        Json
+  expiresAt    DateTime
+  claimedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([worldSeed, rx, ry, expiresAt])
+  @@index([ownerUserId, createdAt])
+}
+
+
+// Canonical Black Market progression and short-lived admission session.
+// Client SaveGame underworld fields are compatibility presentation only.
+model PlayerUnderworldState {
+  userId                 String   @id
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reputation             Int      @default(0)
+  discoveredRoutes       Json
+  revealedLostLands      Json
+  forbiddenDungeonKeys   Int      @default(0)
+  activeContracts        Int      @default(0)
+  inspectionProtection   Int      @default(0)
+  activeSessionToken     String?  @unique
+  activeSourceLand       String?
+  sessionExpiresAt       DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([sessionExpiresAt])
+}
+
+// Daily objectives are advanced only by verified server gameplay events.
+// Rewards are claimed through the canonical inventory command ledger.
+model PlayerQuestProgress {
+  userId      String
+  cycleKey    String
+  questId     String
+  progress    Int      @default(0)
+  completedAt DateTime?
+  claimedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, cycleKey, questId])
+  @@index([userId, cycleKey])
+}
+
+// Deduplicates authoritative gameplay events before they advance objectives.
+model PlayerQuestEvent {
+  userId    String
+  eventKey  String
+  eventKind String
+  amount    Int
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventKey])
+  @@index([userId, createdAt])
+}
+
+// Persistent multi-stage story arcs. Stage transitions are advanced only by
+// deduplicated server-authored gameplay events.
+model PlayerStoryQuest {
+  userId      String
+  storyId     String
+  stageIndex  Int      @default(0)
+  progress    Int      @default(0)
+  stageData   Json     @default("{}")
+  completedAt DateTime?
+  claimedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, storyId])
+  @@index([userId, completedAt, claimedAt])
+}
+
+model NpcInteractionReceipt {
+  id             String   @id @default(uuid())
+  userId         String
+  idempotencyKey String
+  requestHash    String
+  result         Json
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+}
+
+// Per-account settlement farming. Plot definitions are deterministic and
+// server-issued; only mutable crop/timer state is stored here.
+model PlayerFarmPlot {
+  userId      String
+  plotId      String
+  rx          Int
+  ry          Int
+  crop        String?
+  plantedAt   DateTime?
+  readyAt     DateTime?
+  harvestCount Int    @default(0)
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, plotId])
+  @@index([userId, rx, ry])
+}
+
+// Per-account production cooldown for deterministic settlement animals.
+model PlayerAnimalState {
+  userId      String
+  animalId    String
+  rx          Int
+  ry          Int
+  readyAt     DateTime
+  collectCount Int    @default(0)
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, animalId])
+  @@index([userId, rx, ry])
+}
+
+
+// Fully server-authoritative Dungeon instances. Topology and mutable entity
+// state are server-authored; clients submit only intents with revisions and
+// idempotency keys. Closed runs remain as an audit trail.
+model DungeonRun {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dungeonId        String
+  runSeed          Int
+  floor            Int
+  floorSeed        Int
+  revision         Int      @default(0)
+  status           String
+  topology         Json
+  enemies          Json
+  chests           Json
+  playerX          Float
+  playerY          Float
+  playerFacing     Float    @default(0)
+  playerHp         Int
+  playerMaxHp      Int
+  returnRx         Int
+  returnRy         Int
+  returnX          Float
+  returnY          Float
+  keyConsumed      Boolean  @default(false)
+  contractSettled  Boolean  @default(false)
+  floorCompleted   Boolean  @default(false)
+  basicReadyAt     DateTime?
+  abilityReadyAt   DateTime?
+  hazardReadyAt    DateTime?
+  hazardId         String?
+  lastMoveAt       DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  endedAt          DateTime?
+  commands         DungeonCommand[]
+  receipts         DungeonFloorReceipt[]
+  vaultProofs      DungeonVaultProof[]
+
+  @@index([userId, status, createdAt])
+  @@index([dungeonId, createdAt])
+}
+
+model DungeonCommand {
+  id             String   @id @default(uuid())
+  runId          String
+  run            DungeonRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  kind           String
+  requestHash    String
+  result         Json
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([runId, createdAt])
+}
+
+model DungeonFloorReceipt {
+  id        String   @id @default(uuid())
+  runId     String
+  run       DungeonRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  floor     Int
+  boss      Boolean  @default(false)
+  proofHash String   @unique
+  createdAt DateTime @default(now())
+
+  @@unique([runId, floor])
+  @@index([userId, createdAt])
+}
+
+model DungeonVaultProof {
+  id        String   @id @default(uuid())
+  runId     String
+  run       DungeonRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  layer     Int
+  proofHash String   @unique
+  claimedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([runId, layer])
+  @@index([userId, layer, claimedAt, createdAt])
+}
+
+
+// Authoritative Fracture/Lost Territory admission. A blocking session locks
+// canonical inventory and suspends overworld presence until a server-issued
+// exit/death return receipt relocates the player.
+model PvpSession {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roomKey           String
+  gateId            String
+  riskTier          String
+  status            String
+  admissionToken    String   @unique
+  inventoryRevision Int
+  carriedSnapshot   Json
+  sourceRx          Int
+  sourceRy          Int
+  sourceX           Float
+  sourceY           Float
+  returnRx          Int
+  returnRy          Int
+  returnX           Float
+  returnY           Float
+  hp                Int
+  maxHp             Int
+  playerX           Float
+  playerY           Float
+  playerFacing      Float    @default(0)
+  basicReadyAt      DateTime?
+  abilityReadyAt    DateTime?
+  lastMoveAt        DateTime
+  deathToken        String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  endedAt           DateTime?
+  commands          PvpCommand[]
+  victimReceipt     PvpDeathReceipt? @relation("PvpVictimSession")
+  killerReceipts    PvpDeathReceipt[] @relation("PvpKillerSession")
+
+  @@index([userId, status, createdAt])
+  @@index([roomKey, status, createdAt])
+}
+
+model PvpCommand {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId      String?
+  session        PvpSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  kind           String
+  requestHash    String
+  result         Json
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([sessionId, createdAt])
+}
+
+model PvpDeathReceipt {
+  id              String   @id @default(uuid())
+  victimSessionId String   @unique
+  victimSession   PvpSession @relation("PvpVictimSession", fields: [victimSessionId], references: [id], onDelete: Cascade)
+  killerSessionId String
+  killerSession   PvpSession @relation("PvpKillerSession", fields: [killerSessionId], references: [id], onDelete: Cascade)
+  victimUserId    String
+  victim          User     @relation("PvpDeathVictim", fields: [victimUserId], references: [id], onDelete: Cascade)
+  killerUserId    String
+  killer          User     @relation("PvpDeathKiller", fields: [killerUserId], references: [id], onDelete: Cascade)
+  riskTier        String
+  transferred     Json
+  destroyed       Json
+  vaultCrystals   Int      @default(0)
+  victimInventory Json
+  killerInventory Json
+  createdAt       DateTime @default(now())
+
+  @@index([victimUserId, createdAt])
+  @@index([killerUserId, createdAt])
+}
+
+// One process owns a regional PvP room at a time. Leases are renewed while
+// sockets are attached; an expired lease can be taken over after a crash.
+model PvpRoomLease {
+  roomKey        String   @id
+  ownerId        String
+  leaseExpiresAt DateTime
+  updatedAt      DateTime @updatedAt
+
+  @@index([leaseExpiresAt])
+}
+
+
+// Regional player market. Listed items are removed from canonical inventory
+// into escrow at creation and returned or settled only by the market service.
+model MarketListing {
+  id               String   @id @default(uuid())
+  sellerUserId     String
+  seller           User     @relation("MarketSeller", fields: [sellerUserId], references: [id], onDelete: Cascade)
+  buyerUserId      String?
+  buyer            User?    @relation("MarketBuyer", fields: [buyerUserId], references: [id], onDelete: SetNull)
+  landId           String
+  settlementId     String
+  itemId           String
+  quantity         Int
+  unitPrice        Int
+  status           String   @default("active")
+  createCommandKey String
+  closeCommandKey  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  soldAt           DateTime?
+
+  @@unique([sellerUserId, createCommandKey])
+  @@index([status, landId, unitPrice, createdAt])
+  @@index([sellerUserId, status])
+  @@index([buyerUserId, soldAt])
+}
+
+// Short-lived, proximity-checked Sanctuary trades. Offers are stored as
+// canonical JSON and both inventory revisions are verified again at commit.
+model PlayerTradeSession {
+  id                 String   @id @default(uuid())
+  initiatorUserId    String
+  initiator           User     @relation("TradeInitiator", fields: [initiatorUserId], references: [id], onDelete: Cascade)
+  targetUserId       String
+  target              User     @relation("TradeTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  initiatorOffer      Json
+  targetOffer         Json
+  initiatorRevision   Int
+  targetRevision      Int
+  initiatorAccepted   Boolean  @default(false)
+  targetAccepted      Boolean  @default(false)
+  status              String   @default("pending")
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  completedAt         DateTime?
+
+  @@index([initiatorUserId, status, expiresAt])
+  @@index([targetUserId, status, expiresAt])
+  @@index([status, expiresAt])
+}

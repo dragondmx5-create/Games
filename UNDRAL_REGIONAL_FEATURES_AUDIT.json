@@ -1,0 +1,188 @@
+{
+  "seed": 424242,
+  "world": {
+    "radius": 5,
+    "regions": 121,
+    "lands": 6,
+    "landCounts": {
+      "witchlands": 25,
+      "rainforest": 23,
+      "green-land": 24,
+      "frostlands": 20,
+      "cinder-coast": 19,
+      "sunscorched-desert": 10
+    },
+    "riskCounts": {
+      "sanctuary": 30,
+      "frontier": 63,
+      "fracture": 21,
+      "lost": 7
+    },
+    "totalProps": 17887,
+    "portalCount": 30,
+    "dungeonEntrances": 12,
+    "blackMarketRoutes": 6
+  },
+  "settlements": {
+    "total": 30,
+    "publicTravelDestinations": 24,
+    "hidden": 6,
+    "byKind": {
+      "capital": 6,
+      "town": 12,
+      "outpost": 6,
+      "hidden": 6
+    }
+  },
+  "architectureByLand": {
+    "witchlands": {
+      "theme": "witch-crooked",
+      "houses": 25,
+      "settlements": 5,
+      "roles": {
+        "guild-hall": 5,
+        "civic": 1,
+        "market-hall": 1,
+        "quest-house": 1,
+        "residential-small": 7,
+        "workshop": 5,
+        "residential-medium": 3,
+        "shop": 2
+      }
+    },
+    "green-land": {
+      "theme": "green-homestead",
+      "houses": 25,
+      "settlements": 5,
+      "roles": {
+        "guild-hall": 3,
+        "civic": 1,
+        "market-hall": 1,
+        "quest-house": 1,
+        "residential-small": 6,
+        "workshop": 4,
+        "residential-medium": 5,
+        "shop": 4
+      }
+    },
+    "rainforest": {
+      "theme": "rainforest-stilt",
+      "houses": 25,
+      "settlements": 5,
+      "roles": {
+        "guild-hall": 3,
+        "civic": 1,
+        "market-hall": 1,
+        "quest-house": 1,
+        "residential-small": 9,
+        "workshop": 5,
+        "residential-medium": 2,
+        "shop": 3
+      }
+    },
+    "frostlands": {
+      "theme": "frost-steep",
+      "houses": 25,
+      "settlements": 5,
+      "roles": {
+        "guild-hall": 3,
+        "civic": 1,
+        "market-hall": 1,
+        "quest-house": 1,
+        "residential-small": 7,
+        "workshop": 3,
+        "residential-medium": 5,
+        "shop": 4
+      }
+    },
+    "sunscorched-desert": {
+      "theme": "desert-courtyard",
+      "houses": 25,
+      "settlements": 5,
+      "roles": {
+        "guild-hall": 4,
+        "civic": 1,
+        "market-hall": 1,
+        "quest-house": 1,
+        "residential-small": 6,
+        "workshop": 3,
+        "residential-medium": 5,
+        "shop": 4
+      }
+    },
+    "cinder-coast": {
+      "theme": "cinder-industrial",
+      "houses": 25,
+      "settlements": 5,
+      "roles": {
+        "guild-hall": 3,
+        "civic": 1,
+        "market-hall": 1,
+        "quest-house": 1,
+        "residential-small": 6,
+        "workshop": 5,
+        "residential-medium": 4,
+        "shop": 4
+      }
+    }
+  },
+  "natureByLand": {
+    "witchlands": {
+      "ancientTree": 65,
+      "flowerPatch": 47,
+      "rock": 177,
+      "shrub": 290,
+      "tree": 428
+    },
+    "rainforest": {
+      "ancientTree": 106,
+      "reedCluster": 62,
+      "flowerPatch": 62,
+      "rock": 168,
+      "shrub": 672,
+      "tree": 902
+    },
+    "green-land": {
+      "ancientTree": 42,
+      "flowerPatch": 87,
+      "boulder": 41,
+      "rock": 170,
+      "shrub": 568,
+      "tree": 792
+    },
+    "frostlands": {
+      "pineTree": 179,
+      "boulder": 73,
+      "rock": 144,
+      "shrub": 230,
+      "tree": 306
+    },
+    "cinder-coast": {
+      "pineTree": 52,
+      "boulder": 87,
+      "reedCluster": 44,
+      "rock": 134,
+      "shrub": 117,
+      "tree": 155
+    },
+    "sunscorched-desert": {
+      "boulder": 54,
+      "flowerPatch": 7,
+      "rock": 71,
+      "shrub": 43,
+      "tree": 58
+    }
+  },
+  "economy": {
+    "regionalPublicMarket": true,
+    "blackMarketPreserved": true,
+    "p2pTrade": {
+      "serverAuthoritative": true,
+      "sanctuaryOnly": true,
+      "proximityPixels": 96,
+      "maxItemKinds": 4,
+      "escrowedListings": true,
+      "twoPartyAcceptance": true
+    }
+  }
+}

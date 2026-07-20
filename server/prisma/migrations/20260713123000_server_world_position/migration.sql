@@ -1,0 +1,14 @@
+CREATE TABLE "PlayerWorldPosition" (
+  "userId" TEXT NOT NULL,
+  "rx" INTEGER NOT NULL,
+  "ry" INTEGER NOT NULL,
+  "x" DOUBLE PRECISION NOT NULL,
+  "y" DOUBLE PRECISION NOT NULL,
+  "sessionId" TEXT NOT NULL DEFAULT '',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "PlayerWorldPosition_pkey" PRIMARY KEY ("userId")
+);
+ALTER TABLE "PlayerWorldPosition"
+  ADD CONSTRAINT "PlayerWorldPosition_userId_fkey"
+  FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

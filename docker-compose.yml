@@ -1,0 +1,45 @@
+# Local dev: `docker compose up -d postgres` runs the database only (the API
+# runs natively via `npm run dev` in server/ for fast iteration — see
+# CLAUDE.md). The `api` service is the deployable server: `docker compose up
+# -d` brings up both, with migrations applied automatically on boot — the
+# same shape the owner's VPS runs.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: undral
+      POSTGRES_PASSWORD: undral_dev
+      POSTGRES_DB: undral
+    ports:
+      - '5432:5432'
+    volumes:
+      - undral_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U undral -d undral']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://undral:undral_dev@postgres:5432/undral
+      # real deployments override these — see server/.env.example. The
+      # placeholders keep a local `docker compose up` working out of the box
+      # but are NOT production secrets.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-compose-access-secret-change-me-32chars}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-local-compose-internal-key-change-me}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      JWT_ISSUER: ${JWT_ISSUER:-undral-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-undral-game}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      PORT: '8787'
+    ports:
+      - '8787:8787'
+
+volumes:
+  undral_pg_data:

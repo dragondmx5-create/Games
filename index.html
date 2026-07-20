@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#090a0d" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="UNDRAL — a server-authoritative action exploration world across six lands." />
+    <title>UNDRAL — Six Lands Beyond the Veil</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23090a0d'/><path d='M14 15h9v27c0 6 3 9 9 9s9-3 9-9V15h9v28c0 12-7 18-18 18S14 55 14 43z' fill='%23d8b56b'/><circle cx='32' cy='18' r='4' fill='%238ee6c8'/></svg>" />
+    <!-- Modern UI typography: Inter for body/labels, Sora for display headings.
+         Both are self-hosted via @fontsource-variable (imported in main.ts),
+         so there is no external font-CDN request; system-font fallbacks are
+         declared in styles.css. -->
+  </head>
+  <body>
+    <div id="wrap" class="app-shell" data-runtime="menu">
+      <canvas id="game" aria-label="UNDRAL game world"></canvas>
+      <div class="world-vignette" aria-hidden="true"></div>
+      <div class="world-grain" aria-hidden="true"></div>
+      <div id="interface-aura" class="interface-aura" aria-hidden="true"></div>
+      <div id="threat-vignette" class="threat-vignette" aria-hidden="true"></div>
+      <div id="hit-flash" class="hit-flash" aria-hidden="true"></div>
+
+      <div id="connection-strip" class="connection-strip" role="status" aria-live="polite">
+        <span id="server-dot" class="status-dot is-pending"></span>
+        <span id="server-label">Connecting to realm</span>
+        <span class="strip-divider"></span>
+        <span id="save-state">Cloud idle</span>
+      </div>
+
+      <header id="corner-controls" class="utility-dock" aria-label="Game utilities">
+        <button class="icon-button" id="journal-corner-btn" type="button" data-label="Journal" title="Journal (J)" aria-label="Open journal">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.5h10A1.5 1.5 0 0 1 18 6v13H7.5A2.5 2.5 0 0 1 5 16.5V6a1.5 1.5 0 0 1 1.5-1.5Zm.5 11.7c.2-.1.3-.1.5-.1H16V6.5H7v9.7Zm1.5-6.7h5M8.5 12h5"/></svg>
+        </button>
+        <button class="icon-button" id="inv-corner-btn" type="button" data-label="Inventory" title="Inventory (I)" aria-label="Open inventory">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8.5V7a5 5 0 0 1 10 0v1.5M5 8.5h14l-1 11H6l-1-11Zm4 4v3m6-3v3"/></svg>
+        </button>
+        <button class="icon-button" id="map-corner-btn" type="button" data-label="Atlas" title="World map (M)" aria-label="Open world map">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2V6Zm5-2v14m6-12v14"/></svg>
+        </button>
+        <button class="icon-button" id="graphics-btn" type="button" data-label="Visuals" title="Graphics quality" aria-label="Change graphics quality">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/></svg>
+          <span class="quality-letter" aria-hidden="true">A</span>
+        </button>
+        <button class="icon-button" id="mute-btn" type="button" data-label="Audio" title="Mute or unmute" aria-label="Mute audio">
+          <svg class="sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h4l5-4v12l-5-4H4v-4Zm12-1a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12"/></svg>
+          <svg class="sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h4l5-4v12l-5-4H4v-4Zm12-1 5 5m0-5-5 5"/></svg>
+        </button>
+        <button class="icon-button" id="interface-btn" type="button" data-label="Interface" title="Interface settings" aria-label="Open interface settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm0-5v2m0 13v2M3.5 12h2m13 0h2M6 6l1.4 1.4m9.2 9.2L18 18m0-12-1.4 1.4M7.4 16.6 6 18"/></svg>
+        </button>
+        <button class="icon-button hidden" id="fullscreen-btn" type="button" data-label="Fullscreen" title="Fullscreen" aria-label="Toggle fullscreen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5M9 20H4v-5"/></svg>
+        </button>
+      </header>
+
+      <div id="rotate-hint" class="rotate-hint" role="status">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 17h4M4 8a8 8 0 0 0 0 8m16-8a8 8 0 0 1 0 8"/></svg>
+        <span>Rotate for a wider view</span>
+      </div>
+
+      <div id="compass-rail" class="compass-rail" aria-label="Navigation status">
+        <span class="compass-tick dim">W</span><span class="compass-notch"></span><span class="compass-tick">N</span>
+        <div class="compass-copy"><strong id="compass-location">Synchronizing world</strong><span id="compass-risk">ONLINE WORLD</span></div>
+        <span class="compass-tick">E</span><span class="compass-notch"></span><span class="compass-tick dim">S</span>
+      </div>
+
+      <aside id="hud" class="hud-stack" aria-label="Player status">
+        <section class="hud-card hud-location">
+          <div class="eyebrow">Current territory</div>
+          <div id="depth" class="location-name">Synchronizing world…</div>
+          <div class="location-meta"><span id="risk-indicator" class="risk-pill">ONLINE WORLD</span><span id="online-count">SERVER AUTHORITY</span></div>
+        </section>
+
+        <section class="hud-card hud-vitals combat-core" aria-label="Combat condition">
+          <div class="core-header">
+            <div class="level-seal"><span>LEVEL</span><strong id="level-value">1</strong></div>
+            <div class="core-state">
+              <span>Combat condition</span>
+              <strong id="condition-text">READY</strong>
+              <small>SERVER VERIFIED</small>
+            </div>
+          </div>
+          <div class="vital-row health-row">
+            <div class="vital-heading"><span>Vitality</span><span id="hp-text">10 / 10</span></div>
+            <div class="meter meter-health"><div id="hp-fill" style="width:100%"></div></div>
+          </div>
+          <div class="vital-row xp-row">
+            <div class="vital-heading"><span>Ascension progress</span><span id="xp-text">0 / 100</span></div>
+            <div class="meter meter-xp"><div id="xp-fill" style="width:0%"></div></div>
+          </div>
+        </section>
+
+        <section class="hud-card hud-loadout">
+          <canvas id="weapon-icon" width="40" height="40" aria-hidden="true"></canvas>
+          <div class="loadout-copy">
+            <div class="eyebrow">Equipped</div>
+            <div id="weapon"><span id="weapon-label">Unarmed</span></div>
+          </div>
+        </section>
+
+        <section class="hud-card hud-resources expedition-snapshot">
+          <div class="snapshot-mark" aria-hidden="true">◈</div>
+          <div>
+            <div class="eyebrow">Expedition snapshot</div>
+            <div id="loot">No supplies loaded</div>
+          </div>
+        </section>
+
+        <section class="hud-card hud-objectives">
+          <div class="hud-card-head">
+            <div>
+              <div class="eyebrow">Mission tracker</div>
+              <div class="section-title">Verified objectives</div>
+            </div>
+            <button id="journal-inline-btn" class="text-button" type="button">View all</button>
+          </div>
+          <div id="quest-list"><div class="q-row">Loading verified objectives…</div></div>
+        </section>
+      </aside>
+
+      <aside id="minimap-box" class="minimap-card" aria-label="Local map">
+        <div class="minimap-head"><span>Local survey</span><span class="live-mark">LIVE</span></div>
+        <canvas id="minimap" width="156" height="156"></canvas>
+        <div class="minimap-footer"><span class="map-crosshair">+</span><span>Server-synced position</span></div>
+      </aside>
+
+      <aside id="resource-wallet" class="resource-wallet" aria-label="Expedition wallet and resources">
+        <header class="wallet-head">
+          <div><span class="wallet-kicker">EXPEDITION LEDGER</span><strong>Field wallet</strong></div>
+          <div class="wallet-head-side">
+            <span class="wallet-total"><small>LOAD</small><strong id="resource-total">0</strong></span>
+            <span id="wallet-revision" class="wallet-sync">SYNC</span>
+          </div>
+        </header>
+        <div class="crown-balance" title="Gold Crowns are a visual denomination of canonical Crystals. Merchant commands still use server-owned Crystals.">
+          <span class="crown-coin" aria-hidden="true"><i></i></span>
+          <div><span>Gold Crowns</span><strong id="resource-coins">0</strong></div>
+          <small>CRYSTAL VALUE</small>
+        </div>
+        <div class="wallet-grid" aria-label="Carried materials">
+          <div class="wallet-resource wood is-primary" data-resource="wood"><span class="resource-glyph">🪵</span><span><small>Wood</small><strong id="resource-wood">0</strong></span></div>
+          <div class="wallet-resource iron is-primary" data-resource="iron"><span class="resource-glyph">⛏️</span><span><small>Stone / Iron</small><strong id="resource-iron">0</strong></span></div>
+          <div class="wallet-resource meat" data-resource="meat"><span class="resource-glyph">🍖</span><span><small>Meat</small><strong id="resource-meat">0</strong></span></div>
+          <div class="wallet-resource hide" data-resource="hide"><span class="resource-glyph">🥩</span><span><small>Hide</small><strong id="resource-hide">0</strong></span></div>
+          <div class="wallet-resource feather" data-resource="feathers"><span class="resource-glyph">🪶</span><span><small>Feathers</small><strong id="resource-feathers">0</strong></span></div>
+          <div class="wallet-resource crate" data-resource="crates"><span class="resource-glyph">📦</span><span><small>Crates</small><strong id="resource-crates">0</strong></span></div>
+        </div>
+        <div id="resource-feed" class="resource-feed" aria-live="polite"><span class="feed-idle">Supply changes appear here</span></div>
+        <button id="resource-inventory-btn" class="wallet-open" type="button"><span>OPEN EXPEDITION PACK</span><kbd>I</kbd></button>
+      </aside>
+
+      <nav id="combat-hotbar" class="combat-hotbar" aria-label="Combat shortcuts">
+        <div id="hotbar-weapon-slot" class="hotbar-slot weapon-slot is-active"><span class="slot-key">Q</span><span class="slot-glyph" data-lucide="diamond"></span><span id="hotbar-weapon" class="slot-label">Unarmed</span></div>
+        <div class="hotbar-slot"><span class="slot-key">SPACE</span><span class="slot-glyph" data-lucide="sword"></span><span class="slot-label">Attack</span></div>
+        <div id="hotbar-ability-slot" class="hotbar-slot ability-slot"><span class="slot-key">F</span><span class="slot-glyph" data-lucide="sparkles"></span><span id="hotbar-ability-label" class="slot-label">Ability</span><strong id="hotbar-ability-time" class="slot-timer">READY</strong><i id="hotbar-ability-charge" class="slot-charge" aria-hidden="true"></i></div>
+        <div class="hotbar-slot"><span class="slot-key">E</span><span class="slot-glyph" data-lucide="pointer"></span><span class="slot-label">Interact</span></div>
+        <div class="hotbar-slot"><span class="slot-key">SHIFT</span><span class="slot-glyph" data-lucide="footprints"></span><span class="slot-label">Sprint</span></div>
+      </nav>
+
+      <div id="desktop-actions" class="desktop-actions" aria-hidden="true">
+        <span><kbd>WASD</kbd> Move</span>
+        <span><kbd>SHIFT</kbd> Run</span>
+        <span><kbd>SPACE</kbd> Attack</span>
+        <span><kbd>F</kbd> Ability</span>
+        <span><kbd>E</kbd> Interact</span>
+        <span><kbd>RMB</kbd> Orbit camera</span>
+        <span><kbd>WHEEL</kbd> Zoom</span>
+      </div>
+
+      <div id="interaction-prompt" class="interaction-prompt hidden" role="status">
+        <kbd>E</kbd><span id="interaction-copy">Interact</span>
+      </div>
+
+      <div id="panel-scrim" class="panel-scrim hidden" aria-hidden="true"></div>
+
+      <section id="death" class="death-screen panel-fade" role="dialog" aria-modal="true" aria-labelledby="death-title">
+        <div class="death-sigil" aria-hidden="true"></div>
+        <div class="eyebrow">The world has taken its due</div>
+        <h1 id="death-title">FALLEN</h1>
+        <p id="death-msg"></p>
+        <p class="death-rule">Your server-issued death receipt determines what remains. Return before the trail goes cold.</p>
+        <button id="respawn-btn" class="primary-button" type="button">Return to the capital</button>
+        <span class="key-hint">ENTER / TAP</span>
+      </section>
+
+      <section id="shop-panel" class="game-panel shop-panel hidden panel-fade" role="dialog" aria-modal="true" aria-labelledby="shop-title">
+        <header class="panel-header"><span class="panel-corner panel-corner-tl" aria-hidden="true"></span><span class="panel-corner panel-corner-tr" aria-hidden="true"></span>
+          <div>
+            <div class="eyebrow">Canonical economy</div>
+            <h2 id="shop-title">Merchant exchange</h2>
+          </div>
+          <button id="sp-close" class="close-button" type="button" aria-label="Close merchant panel">×</button>
+        </header>
+        <nav class="panel-tabs" aria-label="Merchant sections">
+          <button id="sp-tab-trade" class="panel-tab active" type="button">Merchant</button>
+          <button id="sp-tab-market" class="panel-tab" type="button">Market</button>
+          <button id="sp-tab-p2p" class="panel-tab" type="button">P2P Trade</button>
+          <button id="sp-tab-craft" class="panel-tab" type="button">Craft</button>
+        </nav>
+        <div class="merchant-wallet" aria-label="Current merchant balance">
+          <div><span class="crown-coin mini" aria-hidden="true"><i></i></span><span><small>Gold Crown value</small><strong id="merchant-coins">0</strong></span></div>
+          <div><small>Canonical Crystals</small><strong id="merchant-crystals">0</strong></div>
+          <span class="merchant-rate">25 CROWNS = 1 CRYSTAL · PURCHASES REMAIN SERVER VERIFIED</span>
+        </div>
+        <div id="sp-status" class="panel-status" role="status"></div>
+        <div id="sp-list" class="panel-list"></div>
+      </section>
+
+      <section id="world-map-panel" class="game-panel world-map-panel hidden panel-fade" role="dialog" aria-modal="true" aria-labelledby="world-map-title">
+        <header class="panel-header"><span class="panel-corner panel-corner-tl" aria-hidden="true"></span><span class="panel-corner panel-corner-tr" aria-hidden="true"></span>
+          <div>
+            <div class="eyebrow">121 deterministic regions · six lands</div>
+            <h2 id="world-map-title">World of Undral</h2>
+          </div>
+          <button id="world-map-close" class="close-button" type="button" aria-label="Close world map">×</button>
+        </header>
+        <div class="map-layout">
+          <div>
+            <div id="world-map-grid" class="world-map-grid"></div>
+            <div class="wm-legend" aria-label="Risk legend">
+              <span><i class="wm-dot sanctuary"></i>Sanctuary</span>
+              <span><i class="wm-dot frontier"></i>Frontier</span>
+              <span><i class="wm-dot fracture"></i>Fracture · red danger</span>
+              <span><i class="wm-dot lost"></i>Lost territory</span>
+            </div>
+            <div class="wm-legend wm-legend-lands" aria-label="Land legend">
+              <span><i class="wm-dot" style="background:#b28be1"></i>Witchlands</span>
+              <span><i class="wm-dot" style="background:#91c96e"></i>Green Land</span>
+              <span><i class="wm-dot" style="background:#54c8a2"></i>Rainforest</span>
+              <span><i class="wm-dot" style="background:#8fcceb"></i>Frostlands</span>
+              <span><i class="wm-dot" style="background:#e4b665"></i>Desert</span>
+              <span><i class="wm-dot" style="background:#e17563"></i>Cinder Coast</span>
+            </div>
+          </div>
+          <aside id="world-map-details" class="map-details"></aside>
+        </div>
+      </section>
+
+      <section id="inventory-panel" class="game-panel inventory-panel hidden panel-fade" role="dialog" aria-modal="true" aria-labelledby="inventory-title">
+        <header class="panel-header"><span class="panel-corner panel-corner-tl" aria-hidden="true"></span><span class="panel-corner panel-corner-tr" aria-hidden="true"></span>
+          <div>
+            <div class="eyebrow">Canonical inventory</div>
+            <h2 id="inventory-title">Expedition pack</h2>
+          </div>
+          <button id="inv-close" class="close-button" type="button" aria-label="Close inventory">×</button>
+        </header>
+        <div class="inventory-summary">
+          <span>Tap owned weapons to equip</span>
+          <span id="inventory-revision">SYNCED</span>
+        </div>
+        <div class="inventory-ledger" aria-label="Inventory resource summary">
+          <div class="inventory-crown"><span class="crown-coin mini" aria-hidden="true"><i></i></span><span><small>Gold Crown value</small><strong id="inventory-coins">0</strong></span></div>
+          <div><small>Wood</small><strong id="inventory-wood">0</strong></div>
+          <div><small>Iron</small><strong id="inventory-iron">0</strong></div>
+          <div><small>Provisions</small><strong id="inventory-provisions">0</strong></div>
+          <div><small>Crafting stock</small><strong id="inventory-crafting">0</strong></div>
+        </div>
+        <div id="inv-list" class="inventory-list"></div>
+      </section>
+
+      <section id="journal-panel" class="game-panel journal-panel hidden panel-fade" role="dialog" aria-modal="true" aria-labelledby="journal-title">
+        <header class="panel-header"><span class="panel-corner panel-corner-tl" aria-hidden="true"></span><span class="panel-corner panel-corner-tr" aria-hidden="true"></span>
+          <div>
+            <div class="eyebrow">Server-verified progression</div>
+            <h2 id="journal-title">Field journal</h2>
+          </div>
+          <button id="journal-close" class="close-button" type="button" aria-label="Close journal">×</button>
+        </header>
+        <nav class="panel-tabs journal-tabs" aria-label="Journal sections">
+          <button class="panel-tab active" type="button" data-journal-tab="story">Story</button>
+          <button class="panel-tab" type="button" data-journal-tab="daily">Daily</button>
+          <button class="panel-tab" type="button" data-journal-tab="systems">Expedition</button>
+        </nav>
+        <div id="journal-story" class="journal-page"></div>
+        <div id="journal-daily" class="journal-page hidden"></div>
+        <div id="journal-systems" class="journal-page hidden"></div>
+      </section>
+
+      <section id="interface-panel" class="game-panel interface-panel hidden panel-fade" role="dialog" aria-modal="true" aria-labelledby="interface-title">
+        <header class="panel-header"><span class="panel-corner panel-corner-tl" aria-hidden="true"></span><span class="panel-corner panel-corner-tr" aria-hidden="true"></span>
+          <div>
+            <div class="eyebrow">Local presentation only</div>
+            <h2 id="interface-title">Interface forge</h2>
+          </div>
+          <button id="interface-close" class="close-button" type="button" aria-label="Close interface settings">×</button>
+        </header>
+        <div class="interface-settings">
+          <div class="settings-intro"><span class="settings-rune">UI</span><p>These controls change presentation on this device. Combat, inventory, movement and rewards remain server-owned.</p></div>
+
+          <div class="settings-section" aria-labelledby="settings-audio-head">
+            <div class="settings-section-head" id="settings-audio-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h4l5-4v12l-5-4H4v-4Zm12-1a4 4 0 0 1 0 6m2-9a8 8 0 0 1 0 12"/></svg>
+              <span>Audio</span>
+            </div>
+            <div class="setting-row setting-slider"><div><strong>Master volume</strong><span>Overall loudness for effects and ambience on this device.</span></div><label><output id="volume-output" for="volume-range">100%</output><input id="volume-range" type="range" min="0" max="100" step="5" value="100" /></label></div>
+            <div class="setting-row"><div><strong>Mute all audio</strong><span>Silence every sound without losing your volume setting.</span></div><button id="mute-toggle" class="setting-toggle" type="button" aria-pressed="false"><i></i><span>Off</span></button></div>
+          </div>
+
+          <div class="settings-section" aria-labelledby="settings-graphics-head">
+            <div class="settings-section-head" id="settings-graphics-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/></svg>
+              <span>Graphics</span>
+            </div>
+            <div class="setting-row setting-segmented"><div><strong>Render quality</strong><span>Higher settings add detail and effects at a GPU cost.</span></div>
+              <div id="quality-segmented" class="segmented" role="group" aria-label="Render quality">
+                <button type="button" data-quality="auto">Auto</button>
+                <button type="button" data-quality="low">Low</button>
+                <button type="button" data-quality="medium">Medium</button>
+                <button type="button" data-quality="high">High</button>
+              </div>
+            </div>
+            <div class="setting-row"><div><strong>Atmospheric grain</strong><span>Keep the subtle film texture layered over the world.</span></div><button id="grain-toggle" class="setting-toggle" type="button" aria-pressed="true"><i></i><span>On</span></button></div>
+          </div>
+
+          <div class="settings-section" aria-labelledby="settings-interface-head">
+            <div class="settings-section-head" id="settings-interface-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              <span>Interface</span>
+            </div>
+            <div class="setting-row"><div><strong>Reduced motion</strong><span>Replace drifting, parallax and large transitions with subtle fades.</span></div><button id="motion-toggle" class="setting-toggle" type="button" aria-pressed="false"><i></i><span>Off</span></button></div>
+            <div class="setting-row"><div><strong>High contrast</strong><span>Strengthen text, borders and vital-state differentiation.</span></div><button id="contrast-toggle" class="setting-toggle" type="button" aria-pressed="false"><i></i><span>Off</span></button></div>
+            <div class="setting-row"><div><strong>Compact expedition HUD</strong><span>Collapse secondary cards to keep more of the world visible.</span></div><button id="compact-toggle" class="setting-toggle" type="button" aria-pressed="false"><i></i><span>Off</span></button></div>
+            <div class="setting-row setting-slider"><div><strong>HUD scale</strong><span>Scale runtime interface without changing the game canvas.</span></div><label><output id="hud-scale-output" for="hud-scale">100%</output><input id="hud-scale" type="range" min="82" max="118" step="2" value="100" /></label></div>
+          </div>
+
+          <button id="interface-reset" class="secondary-button settings-reset" type="button">Restore interface defaults</button>
+        </div>
+      </section>
+
+      <section id="auth-panel" class="game-panel auth-panel hidden panel-fade" role="dialog" aria-modal="true" aria-labelledby="account-title">
+        <header class="panel-header"><span class="panel-corner panel-corner-tl" aria-hidden="true"></span><span class="panel-corner panel-corner-tr" aria-hidden="true"></span>
+          <div>
+            <div class="eyebrow">Persistent realm identity</div>
+            <h2 id="account-title">Account</h2>
+          </div>
+          <button id="ath-close" class="close-button" type="button" aria-label="Close account panel">×</button>
+        </header>
+        <div class="auth-body">
+          <div id="ath-status" class="panel-status" role="status"></div>
+
+          <div id="ath-logged-out">
+            <form id="ath-login-form" class="auth-form">
+              <label for="ath-login-email">Email address</label>
+              <input id="ath-login-email" type="email" placeholder="you@example.com" autocomplete="email" required />
+              <label for="ath-login-password">Password</label>
+              <input id="ath-login-password" type="password" placeholder="Your password" autocomplete="current-password" required />
+              <button type="submit" class="primary-button">Enter the realm</button>
+            </form>
+            <button id="ath-show-register" class="link-button" type="button">Create a new account</button>
+
+            <form id="ath-register-form" class="auth-form ath-hidden">
+              <label for="ath-reg-email">Email address</label>
+              <input id="ath-reg-email" type="email" placeholder="you@example.com" autocomplete="email" required />
+              <label for="ath-reg-username">Explorer name</label>
+              <input id="ath-reg-username" type="text" placeholder="3–24 characters" autocomplete="username" required minlength="3" maxlength="24" />
+              <label for="ath-reg-password">Password</label>
+              <input id="ath-reg-password" type="password" placeholder="At least 8 characters" autocomplete="new-password" required minlength="8" />
+              <button type="submit" class="primary-button">Create account</button>
+            </form>
+            <button id="ath-show-login" class="link-button ath-hidden" type="button">Return to login</button>
+          </div>
+
+          <div id="ath-logged-in" class="ath-hidden account-profile">
+            <div class="profile-mark" aria-hidden="true">U</div>
+            <div>
+              <div class="eyebrow">Authenticated explorer</div>
+              <p id="ath-username"></p>
+            </div>
+            <button id="ath-logout" class="secondary-button" type="button">Log out</button>
+          </div>
+        </div>
+      </section>
+
+      <main id="title" class="title-screen">
+        <div class="title-atmosphere" aria-hidden="true">
+          <div id="rune-field" class="rune-field"></div>
+          <div class="realm-ring realm-ring-one"></div><div class="realm-ring realm-ring-two"></div>
+          <div class="orb orb-one"></div><div class="orb orb-two"></div><div class="orb orb-three"></div>
+          <div class="ruin ruin-left"></div><div class="ruin ruin-right"></div>
+        </div>
+
+        <div class="title-topbar">
+          <a class="brand-mini" href="#" aria-label="UNDRAL home"><span class="brand-rune">U</span><span>UNDRAL</span></a>
+          <div class="title-status-wrap">
+            <div class="world-cycle"><span>WORLD CYCLE</span><strong>07 · AGE OF ASH</strong></div>
+            <div class="title-status"><span id="title-server-dot" class="status-dot is-pending"></span><span id="title-server-label">Realm handshake</span></div>
+          </div>
+        </div>
+
+        <div class="title-layout">
+          <section class="hero-copy">
+            <div class="chapter-line"><span></span>ONLINE ACTION EXPLORATION<span></span></div>
+            <h1><span>UN</span><i>DRAL</i></h1><div class="hero-ornament" aria-hidden="true"><i></i><b>◆</b><i></i></div>
+            <p id="story" class="hero-story">Six lands. Hidden roads. Different rules beyond every threshold.</p>
+            <div class="world-facts" aria-label="World scale">
+              <div><strong>06</strong><span>Authored lands</span></div><div><strong>121</strong><span>Shared regions</span></div><div><strong>12</strong><span>Deep dungeons</span></div>
+            </div>
+            <div class="hero-actions">
+              <button class="primary-button hero-start" id="start-btn" type="button">
+                <span id="start-label">Enter world</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+              </button>
+              <button class="secondary-button ath-hidden" id="new-game-btn" type="button">Begin a new expedition</button>
+              <button class="ghost-button" id="account-btn" type="button">Account</button>
+            </div>
+            <div id="boot-state" class="boot-state" role="status" aria-live="polite">
+              <div class="boot-line"><span id="boot-stage">Preparing world assets</span><span id="boot-percent">0%</span></div>
+              <div class="boot-track"><div id="boot-progress"></div></div>
+            </div>
+          </section>
+
+          <aside class="title-console">
+            <div class="realm-index">
+              <div class="realm-index-head"><div><span class="eyebrow">Atlas signal</span><strong id="land-preview-title">The Witchlands</strong></div><span id="land-preview-tag" class="realm-tag">VEIL / MIASMA</span></div>
+              <p id="land-preview-copy">A drowned frontier of crooked towers, witch-lights and roads that move after dusk.</p>
+              <div class="land-selector" role="list" aria-label="Preview the six lands">
+                <button class="land-sigil active" type="button" data-land="witchlands" aria-label="Preview The Witchlands"><span>WI</span><i></i></button>
+                <button class="land-sigil" type="button" data-land="green" aria-label="Preview Green Land"><span>GR</span><i></i></button>
+                <button class="land-sigil" type="button" data-land="rainforest" aria-label="Preview Rainforest"><span>RA</span><i></i></button>
+                <button class="land-sigil" type="button" data-land="frost" aria-label="Preview Frostlands"><span>FR</span><i></i></button>
+                <button class="land-sigil" type="button" data-land="desert" aria-label="Preview Sunscorched Desert"><span>SU</span><i></i></button>
+                <button class="land-sigil" type="button" data-land="cinder" aria-label="Preview Cinder Coast"><span>CI</span><i></i></button>
+              </div>
+            </div>
+            <nav class="title-tabs" aria-label="Game overview">
+              <button class="title-tab active" type="button" data-title-tab="briefing">Briefing</button>
+              <button class="title-tab" type="button" data-title-tab="systems">Systems</button>
+              <button class="title-tab" type="button" data-title-tab="controls">Controls</button>
+            </nav>
+
+            <div id="title-panel-briefing" class="title-panel">
+              <div class="briefing-card featured">
+                <span class="card-index">01</span>
+                <div><strong>Shared world</strong><p>121 deterministic regions across six authored lands, built from one backend-issued seed.</p></div>
+              </div>
+              <div class="briefing-grid">
+                <div class="briefing-card"><span class="card-index">02</span><div><strong>Real risk</strong><p>Sanctuary, Frontier, Fracture and full-loot Lost Territory.</p></div></div>
+                <div class="briefing-card"><span class="card-index">03</span><div><strong>Server authority</strong><p>Combat, economy, dungeons, quests and loss settle on the backend.</p></div></div>
+              </div>
+              <div id="vault-info" class="vault-card"></div>
+            </div>
+
+            <div id="title-panel-systems" class="title-panel hidden">
+              <div class="system-grid">
+                <article><span>WORLD</span><strong>Six authored lands</strong><p>Capitals, settlements, climates, resources and portal routes.</p></article>
+                <article><span>COMBAT</span><strong>Authoritative encounters</strong><p>Server-owned enemies, cooldowns, damage, loot bags and respawn.</p></article>
+                <article><span>DEPTH</span><strong>Twelve dungeons</strong><p>Persistent runs, bosses, receipts, proofs and exact return.</p></article>
+                <article><span>ECONOMY</span><strong>Canonical inventory</strong><p>Revisioned shop, crafting, equipment and shared resources.</p></article>
+                <article><span>RISK</span><strong>Fracture PvP</strong><p>Room admission, extraction and loss rules enforced by the realm.</p></article>
+                <article><span>UNDERWAY</span><strong>Hidden market</strong><p>Reputation, rotating stock, routes, contracts and forbidden keys.</p></article>
+              </div>
+            </div>
+
+            <div id="title-panel-controls" class="title-panel hidden">
+              <div class="control-grid" id="controls-hint">
+                <div><kbd>WASD</kbd><span>Move</span></div><div><kbd>SHIFT</kbd><span>Run</span></div>
+                <div><kbd>SPACE</kbd><span>Attack</span></div><div><kbd>F</kbd><span>Ability</span></div>
+                <div><kbd>E</kbd><span>Interact</span></div><div><kbd>Q</kbd><span>Switch weapon</span></div>
+                <div><kbd>I</kbd><span>Inventory</span></div><div><kbd>M</kbd><span>World map</span></div>
+                <div><kbd>J</kbd><span>Journal</span></div><div><kbd>ENTER</kbd><span>Respawn</span></div>
+                <div><kbd>RMB DRAG</kbd><span>Orbit 3D camera</span></div><div><kbd>WHEEL</kbd><span>Camera zoom</span></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="title-footer">
+          <span>TRUE 3D / THREE.JS</span><span>SERVER-AUTHORITATIVE</span><span>CLOUD PERSISTENCE</span>
+          <span class="footer-note">The browser renders intent. The realm decides outcomes.</span>
+        </footer>
+      </main>
+
+      <div id="toast-region" class="toast-region" aria-live="polite" aria-relevant="additions"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

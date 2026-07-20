@@ -1,0 +1,20 @@
+{
+  "_comment": "Rename this file to manifest.json and drop your PNGs next to it to override any built-in sprite. 1 image pixel = 1 world pixel (one tile is 16px). Sprites are drawn feet-at-bottom, horizontally centered. Weapon sprites point blade-up with the hilt at the bottom.",
+  "images": {
+    "bag": "bag.png",
+    "wallTop": "wall-top.png",
+    "wallFace": "wall-face.png",
+    "brickTop": "brick-top.png",
+    "brickFace": "brick-face.png",
+    "weapon.bone": "weapon-bone.png",
+    "weapon.chitin": "weapon-chitin.png",
+    "weapon.crystal": "weapon-crystal.png",
+    "stalagmite": "stalagmite.png",
+    "pillar": "pillar.png",
+    "statue": "statue.png",
+    "bones": "bones.png",
+    "shrooms": "shrooms.png",
+    "glowshroom": "glowshroom.png",
+    "crystal": "crystal.png"
+  }
+}

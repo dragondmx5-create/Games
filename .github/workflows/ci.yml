@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  client:
+    name: client — vitest + tsc + vite build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  server:
+    name: server — vitest (real Postgres) + tsc
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: undral
+          POSTGRES_PASSWORD: undral_dev
+          POSTGRES_DB: undral_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U undral -d undral_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://undral:undral_dev@localhost:5432/undral_test
+      # the suite's setup.ts fills in every other env var it needs
+      - run: npm test
+        env:
+          DATABASE_URL: postgresql://undral:undral_dev@localhost:5432/undral_test
+
+  docker:
+    name: server — docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t undral-server ./server

@@ -1,0 +1,29 @@
+{
+  "regions": 121,
+  "lands": [
+    "cinder-coast",
+    "frostlands",
+    "green-land",
+    "rainforest",
+    "sunscorched-desert",
+    "witchlands"
+  ],
+  "settlements": {
+    "capital": 6,
+    "town": 12,
+    "outpost": 6,
+    "hidden": 6
+  },
+  "houses": 150,
+  "capitalSignatureBuildings": 24,
+  "dungeonPortals": 12,
+  "dungeonDressing": 72,
+  "naturalProps": 6433,
+  "totalProps": 17887,
+  "totalPathTiles": 143833,
+  "maxPropsInRegion": 213,
+  "maxHousesInRegion": 8,
+  "resourceNodes": 4908,
+  "failures": [],
+  "ok": true
+}

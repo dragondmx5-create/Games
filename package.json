@@ -1,0 +1,55 @@
+{
+  "name": "undral",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "artifact": "npm run build && node scripts/inline-build.cjs",
+    "test": "vitest run",
+    "check:authority": "node scripts/check-authority-boundary.cjs",
+    "verify": "npm run check:authority && npm test -- --run && npm run art:validate && npm run build",
+    "ai:map": "node scripts/ai-map.mjs",
+    "art:validate": "npm run art:textures:validate && node scripts/validate-advanced-rendering.mjs && tsx scripts/validate-art3d.ts",
+    "art:textures": "python3 scripts/generate_pbr_textures.py --size 512 --output src/assets3d/pbr && python3 scripts/build_terrain_atlas.py",
+    "art:textures:validate": "node scripts/validate-pbr-textures.mjs && npm run art:textures:qa",
+    "art:textures:qa": "npm run art:textures:previews && python3 scripts/validate_texture_repetition.py",
+    "typecheck:source": "tsc --noEmit",
+    "art:textures:previews": "python3 scripts/generate_texture_previews.py",
+    "audit:regional": "tsx scripts/audit-regional-features.ts",
+    "mobile:build": "npm run build && npx cap sync",
+    "mobile:sync": "npx cap sync",
+    "android:open": "npx cap open android",
+    "android:debug": "npm run mobile:build && cd android && ./gradlew assembleDebug",
+    "android:bundle": "npm run mobile:build && cd android && ./gradlew bundleRelease"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/cli": "^8.4.2",
+    "@types/three": "^0.185.0",
+    "canvas": "^3.2.3",
+    "tsx": "^4.23.1",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/screen-orientation": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/sora": "^5.2.8",
+    "@formkit/auto-animate": "^0.10.0",
+    "lucide": "^1.25.0",
+    "simplex-noise": "^4.0.3",
+    "three": "^0.185.1"
+  },
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10"
+  }
+}

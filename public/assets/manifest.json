@@ -1,0 +1,22 @@
+{
+  "_comment": "Owner-deployed art overrides (1 image pixel = 1 world pixel, feet-at-bottom, side art faces right). Animal sprites come from the CC0 Ninja Adventure Asset Pack by pixel-boy. '<key>.walk' entries are horizontal 4-frame strips sliced at load time.",
+  "images": {
+    "cow": "cow.png",
+    "cow.walk": "cow-walk.png",
+    "chicken": "chicken.png",
+    "chicken.walk": "chicken-walk.png",
+    "pet": "pet.png",
+    "pet.walk": "pet-walk.png",
+    "tree": "tree.png",
+    "tree.2": "tree-2.png",
+    "tree.3": "tree-3.png",
+    "treeDead": "tree-dead.png",
+    "treeStump": "tree-stump.png",
+    "rock": "rock.png",
+    "shrooms": "bush.png",
+    "wood": "wood.png",
+    "tree.4": "tree-4.png",
+    "fence": "fence.png",
+    "tree.5": "tree-5.png"
+  }
+}

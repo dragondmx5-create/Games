@@ -1,0 +1,408 @@
+.desktop-actions { display: none; }
+
+/* Existing runtime pieces inherit one coherent scale and risk language. */
+.hud-stack { transform: translateX(calc(-100% - 30px)) scale(var(--hud-scale)); transform-origin: top left; }
+[data-runtime='game'] .hud-stack { transform: translateX(0) scale(var(--hud-scale)); }
+.minimap-card { transform: translateX(calc(100% + 30px)) scale(var(--hud-scale)); transform-origin: top right; }
+[data-runtime='game'] .minimap-card { transform: translateX(0) scale(var(--hud-scale)); }
+.utility-dock { transform: translateY(-160%) scale(var(--hud-scale)); transform-origin: top right; }
+[data-runtime='game'] .utility-dock { transform: translateY(0) scale(var(--hud-scale)); }
+.connection-strip { transform: translateX(-50%) translateY(-150%) scale(var(--hud-scale)); transform-origin: top center; }
+[data-runtime='game'] .connection-strip { transform: translateX(-50%) translateY(0) scale(var(--hud-scale)); }
+.risk-pill,
+.live-mark { color: var(--risk-accent); border-color: rgba(var(--risk-accent-rgb), .18); }
+.hud-location::after,
+.minimap-card::after { background: linear-gradient(90deg, transparent, rgba(var(--risk-accent-rgb), .42), transparent); }
+
+[data-hud='compact'] .hud-resources,
+[data-hud='compact'] .hud-objectives { display: none; }
+[data-hud='compact'] .hud-stack { width: 265px; }
+[data-hud='compact'] .minimap-footer { display: none; }
+[data-hud='compact'] .minimap-card { width: 168px; }
+
+[data-grain='off'] .world-grain,
+body[data-grain='off']::after { opacity: 0 !important; }
+[data-contrast='high'] {
+  --text: #fffaf0;
+  --text-muted: #d4d0c7;
+  --text-faint: #aaa79f;
+  --line: rgba(255,255,255,.22);
+  --line-strong: rgba(255,225,158,.56);
+}
+[data-contrast='high'] .hud-card,
+[data-contrast='high'] .minimap-card,
+[data-contrast='high'] .game-panel,
+[data-contrast='high'] .utility-dock,
+[data-contrast='high'] .combat-hotbar { border-color: rgba(255,231,177,.36); background-color: rgba(5,7,9,.98); }
+[data-contrast='high'] .meter { border-color: rgba(255,255,255,.22); }
+[data-contrast='high'] .slot-label,
+[data-contrast='high'] .vital-heading,
+[data-contrast='high'] .minimap-footer { color: #e9e4d8; }
+
+/* Local interface settings. */
+.interface-panel { width: min(690px, calc(100vw - 28px)); }
+.interface-settings { display: flex; flex-direction: column; gap: 1px; overflow: auto; padding: 14px 18px 18px; }
+.settings-intro {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid rgba(142,230,200,.12);
+  background: linear-gradient(90deg, rgba(142,230,200,.055), transparent);
+}
+.settings-rune { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid rgba(142,230,200,.22); color: var(--mint); font-family: var(--font-display); font-size: 16px; transform: rotate(45deg); }
+.settings-intro p { margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.6; }
+.setting-row {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 22px;
+  padding: 13px 9px;
+  border-bottom: 1px solid rgba(255,255,255,.055);
+}
+.setting-row strong { display: block; color: var(--text); font-size: 12px; font-weight: 680; }
+.setting-row > div > span { display: block; margin-top: 5px; color: var(--text-faint); font-size: 9px; line-height: 1.45; }
+.setting-toggle {
+  display: grid;
+  width: 72px;
+  height: 31px;
+  grid-template-columns: 26px 1fr;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px 3px 3px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: #090b0e;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+.setting-toggle i { display: block; width: 23px; height: 23px; background: #2b3036; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); transition: transform .18s ease, background .18s ease; }
+.setting-toggle.is-on { border-color: rgba(142,230,200,.28); color: var(--mint); background: rgba(142,230,200,.04); }
+.setting-toggle.is-on i { background: linear-gradient(135deg, #4ba68d, #285f52); box-shadow: 0 0 12px rgba(142,230,200,.15); }
+.setting-slider label { display: grid; grid-template-columns: 48px 150px; align-items: center; gap: 10px; }
+.setting-slider output { color: var(--gold-bright); font-family: var(--font-mono); font-size: 9px; text-align: right; }
+.setting-slider input { width: 150px; accent-color: var(--gold); }
+.settings-reset { align-self: flex-start; margin-top: 14px; }
+
+/* Grouped settings sections (Audio / Graphics / Interface) */
+.settings-section { display: flex; flex-direction: column; gap: 1px; margin-top: 10px; }
+.settings-section:first-of-type { margin-top: 2px; }
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 2px 4px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(142,230,200,.16);
+  color: var(--mint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+}
+.settings-section-head svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.settings-section-head span { font-weight: 700; }
+.settings-section .setting-row:last-child { border-bottom: none; }
+
+/* Segmented control (render quality) */
+.setting-segmented { grid-template-columns: minmax(0, 1fr) auto; }
+.segmented { display: inline-flex; border: 1px solid rgba(255,255,255,.1); background: #090b0e; overflow: hidden; }
+.segmented button {
+  padding: 7px 12px;
+  border: none;
+  border-left: 1px solid rgba(255,255,255,.07);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  transition: background .16s ease, color .16s ease;
+}
+.segmented button:first-child { border-left: none; }
+.segmented button:hover { color: var(--text-muted); background: rgba(255,255,255,.03); }
+.segmented button.is-active { color: var(--gold-bright); background: rgba(224,196,111,.1); box-shadow: inset 0 -2px 0 var(--gold); }
+
+@media (max-width: 1180px) {
+  .title-layout { grid-template-columns: minmax(0, 1fr) minmax(390px, .88fr); gap: 34px; }
+  .title-console { min-height: 570px; }
+  .compass-rail { min-width: min(430px, calc(100vw - 370px)); }
+  .hotbar-slot { width: 62px; }
+}
+
+@media (max-width: 900px) {
+  .world-cycle { display: none; }
+  .title-layout { grid-template-columns: 1fr; }
+  .title-console { width: min(680px, 100%); min-height: auto; transform: none; }
+  .hero-copy { transform: none; }
+  .world-facts { width: 100%; }
+  .compass-rail { top: calc(var(--safe-top) + 54px); min-width: min(430px, calc(100vw - 32px)); }
+  .compass-tick,
+  .compass-notch { display: none; }
+  .combat-hotbar { bottom: calc(var(--safe-bottom) + 2px); }
+  .hotbar-slot { width: 58px; }
+}
+
+@media (max-width: 640px) {
+  .title-screen { padding-left: 14px; padding-right: 14px; }
+  .title-topbar { min-height: 50px; }
+  .title-status { font-size: 9px; }
+  .hero-copy h1 { font-size: clamp(64px, 24vw, 98px); }
+  .hero-story { margin-top: 20px; font-size: 17px; }
+  .world-facts div { display: block; min-height: 62px; padding: 10px 8px; text-align: center; }
+  .world-facts strong { display: block; font-size: 19px; }
+  .world-facts span { display: block; margin-top: 4px; font-size: 6px; }
+  .realm-index { margin: 0 0 8px; padding: 14px 12px 12px; }
+  .realm-index-head strong { font-size: 18px; }
+  .realm-index > p { font-size: 10px; }
+  .land-selector { gap: 3px; }
+  .land-sigil { height: 38px; font-size: 7px; }
+  .title-console { padding: 6px; }
+  .title-tabs { padding: 3px; }
+  .combat-hotbar { gap: 2px; padding: 4px; }
+  .hotbar-slot { width: 52px; height: 54px; }
+  .slot-glyph { font-size: 16px; }
+  .slot-label { font-size: 6px; }
+  .compass-rail { top: calc(var(--safe-top) + 50px); min-width: calc(100vw - 26px); padding: 0 10px; }
+  .compass-copy { min-width: 0; width: 100%; }
+  .interface-settings { padding: 10px; }
+  .setting-row { min-height: 78px; gap: 12px; padding: 12px 4px; }
+  .setting-slider { grid-template-columns: 1fr; }
+  .setting-slider label { grid-template-columns: 48px 1fr; }
+  .setting-slider input { width: 100%; }
+}
+
+@media (max-height: 760px) and (orientation: landscape) {
+  .compass-rail { top: calc(var(--safe-top) + 2px); }
+  .combat-hotbar { bottom: 8px; transform-origin: bottom center; }
+  .hotbar-slot { width: 58px; height: 51px; }
+  .slot-glyph { font-size: 15px; }
+  [data-runtime='game'] .hud-stack { gap: 5px; }
+  .hud-objectives,
+  .hud-resources { display: none; }
+}
+
+[data-motion='reduced'] .rune-field,
+[data-motion='reduced'] .realm-ring,
+[data-motion='reduced'] .orb,
+[data-motion='reduced'] .threat-vignette { animation: none !important; }
+[data-motion='reduced'] .hero-copy,
+[data-motion='reduced'] .title-console { transform: none !important; transition: none !important; }
+[data-motion='reduced'] .hit-flash.is-hit { animation-duration: .12s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rune-field,
+  .realm-ring { display: none; }
+  .hero-copy,
+  .title-console { transform: none !important; }
+  .threat-vignette { animation: none !important; }
+}
+
+/* ========================================================================== 
+   VEILFORGE II — live resource economy HUD
+   Crowns are a presentation denomination of canonical crystals (25:1).
+   ========================================================================== */
+.resource-wallet {
+  position: fixed;
+  top: calc(var(--safe-top) + 276px);
+  right: var(--safe-right);
+  z-index: 19;
+  width: 268px;
+  overflow: hidden;
+  transform: translateX(calc(100% + 36px)) scale(var(--hud-scale));
+  transform-origin: top right;
+  border: 1px solid rgba(216,181,107,.18);
+  background:
+    linear-gradient(135deg, rgba(var(--risk-accent-rgb), .055), transparent 42%),
+    linear-gradient(180deg, rgba(20,23,28,.96), rgba(7,9,12,.94));
+  box-shadow: 0 22px 62px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.022);
+  clip-path: polygon(11px 0, 100% 0, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%, 0 11px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .32s ease;
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+.resource-wallet::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0 4px, rgba(255,255,255,.012) 4px 5px);
+  mix-blend-mode: soft-light;
+}
+.resource-wallet::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--risk-accent-rgb), .85), transparent);
+  box-shadow: 0 0 16px rgba(var(--risk-accent-rgb), .48);
+}
+[data-runtime='game'] .resource-wallet {
+  transform: translateX(0) scale(var(--hud-scale));
+  opacity: 1;
+  pointer-events: auto;
+}
+.wallet-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 49px;
+  padding: 9px 12px 8px;
+  border-bottom: 1px solid rgba(255,255,255,.055);
+  background: linear-gradient(90deg, rgba(255,255,255,.025), transparent);
+}
+.wallet-head > div { display: grid; gap: 2px; }
+.wallet-kicker,
+.wallet-head strong,
+.wallet-sync { font-family: var(--font-mono); text-transform: uppercase; }
+.wallet-kicker { color: var(--text-faint); font-size: 6px; letter-spacing: .2em; }
+.wallet-head strong { color: #ded8cb; font-size: 10px; letter-spacing: .09em; }
+.wallet-sync {
+  padding: 4px 6px;
+  border: 1px solid rgba(142,230,200,.14);
+  background: rgba(142,230,200,.045);
+  color: var(--mint);
+  font-size: 6px;
+  letter-spacing: .08em;
+}
+.crown-balance {
+  position: relative;
+  display: grid;
+  min-height: 74px;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(216,181,107,.11);
+  background:
+    radial-gradient(circle at 18% 50%, rgba(255,208,105,.11), transparent 28%),
+    linear-gradient(90deg, rgba(216,181,107,.07), transparent 75%);
+}
+.crown-balance > div { display: grid; gap: 2px; }
+.crown-balance > div > span { color: #b7ad99; font-family: var(--font-mono); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; }
+.crown-balance strong {
+  color: #ffe0a0;
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .03em;
+  line-height: 1;
+  text-shadow: 0 0 18px rgba(241,194,99,.22);
+}
+.crown-balance > small {
+  align-self: end;
+  margin-bottom: 8px;
+  color: #817966;
+  font-family: var(--font-mono);
+  font-size: 5px;
+  letter-spacing: .15em;
+  writing-mode: vertical-rl;
+}
+.crown-coin {
+  position: relative;
+  display: grid;
+  width: 41px;
+  height: 41px;
+  place-items: center;
+  border: 1px solid #b98832;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, #fff1b4 0 5%, #eabf5a 6% 19%, #9a6521 48%, #513015 73%, #d39932 75% 100%);
+  box-shadow: 0 0 0 3px rgba(216,181,107,.06), inset 0 0 0 3px rgba(255,234,157,.19), 0 7px 18px rgba(0,0,0,.32);
+}
+.crown-coin::before {
+  content: 'U';
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid rgba(76,43,13,.65);
+  border-radius: 50%;
+  color: #5f3615;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  text-shadow: 0 1px rgba(255,228,140,.35);
+}
+.crown-coin i { position: absolute; inset: 3px; border: 1px dashed rgba(86,48,15,.5); border-radius: inherit; }
+.crown-coin.mini { width: 31px; height: 31px; }
+.crown-coin.mini::before { width: 17px; height: 17px; font-size: 10px; }
+.wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  background: rgba(255,255,255,.035);
+}
+.wallet-resource {
+  position: relative;
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: 29px 1fr;
+  align-items: center;
+  gap: 7px;
+  overflow: visible;
+  padding: 7px 8px;
+  background: rgba(8,10,13,.96);
+  transition: background .18s ease, transform .18s ease;
+}
+.wallet-resource:hover { z-index: 3; background: rgba(21,24,28,.98); transform: translateY(-1px); }
+.resource-glyph {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.07);
+  background: radial-gradient(circle, rgba(255,255,255,.07), rgba(255,255,255,.015));
+  color: #9fa49f;
+  font-family: var(--font-display);
+  font-size: 14px;
+  text-shadow: 0 0 10px currentColor;
+}
+.wallet-resource > span:last-child { display: grid; min-width: 0; gap: 1px; }
+.wallet-resource small { color: #777a79; font-family: var(--font-mono); font-size: 6px; letter-spacing: .08em; text-transform: uppercase; }
+.wallet-resource strong { color: #dedbd3; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.wallet-resource.crystal .resource-glyph { color: #b68bea; }
+.wallet-resource.wood .resource-glyph { color: #c59a63; }
+.wallet-resource.iron .resource-glyph { color: #aebbc9; }
+.wallet-resource.shroom .resource-glyph { color: #86d0ca; }
+.wallet-resource.meat .resource-glyph { color: #db8179; }
+.wallet-resource.hide .resource-glyph { color: #c1a47e; }
+.wallet-resource.feather .resource-glyph { color: #a8cfea; }
+.wallet-resource.crate .resource-glyph { color: #d8b56b; }
+.wallet-resource::after,
+.crown-balance::after {
+  content: attr(data-delta);
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 4;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  background: rgba(5,8,8,.94);
+  color: transparent;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 800;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+.wallet-resource.is-gain::after,
+.crown-balance.is-gain::after { color: #83e5b6; animation: walletDelta .72s ease forwards; }
+.wallet-resource.is-loss::after,
+.crown-balance.is-loss::after { color: #ef857a; animation: walletDelta .72s ease forwards; }
+.wallet-resource.is-gain,
+.crown-balance.is-gain { animation: walletGain .58s ease; }
+.wallet-resource.is-loss,
+.crown-balance.is-loss { animation: walletLoss .58s ease; }
