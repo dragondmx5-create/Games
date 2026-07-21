@@ -48,7 +48,7 @@ jobs:
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Install JavaScript dependencies
-        run: npm ci || npm install
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
 
       - name: Validate mobile API URL
         shell: bash
