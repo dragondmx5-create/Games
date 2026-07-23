@@ -18,16 +18,9 @@
     "art:textures:qa": "npm run art:textures:previews && python3 scripts/validate_texture_repetition.py",
     "typecheck:source": "tsc --noEmit",
     "art:textures:previews": "python3 scripts/generate_texture_previews.py",
-    "audit:regional": "tsx scripts/audit-regional-features.ts",
-    "mobile:build": "npm run build && npx cap sync",
-    "mobile:sync": "npx cap sync",
-    "android:open": "npx cap open android",
-    "android:debug": "npm run mobile:build && cd android && ./gradlew assembleDebug",
-    "android:bundle": "npm run mobile:build && cd android && ./gradlew bundleRelease"
+    "audit:regional": "tsx scripts/audit-regional-features.ts"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.4.2",
-    "@capacitor/cli": "^8.4.2",
     "@types/three": "^0.185.0",
     "canvas": "^3.2.3",
     "tsx": "^4.23.1",
@@ -36,10 +29,8 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.2",
     "@capacitor/screen-orientation": "^8.0.1",
-    "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/sora": "^5.2.8",
