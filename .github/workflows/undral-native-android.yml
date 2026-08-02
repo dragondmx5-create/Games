@@ -33,14 +33,6 @@ jobs:
           patch --batch --forward -p1
           < "${GITHUB_WORKSPACE}/.undral-source/android-build.patch"
 
-      - name: Disable Vulkan for crash-isolation build
-        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
-        shell: bash
-        run: |
-          sed -i 's/-DUNDRAL_ENABLE_VULKAN=ON/-DUNDRAL_ENABLE_VULKAN=OFF/' \
-            native/android/app/build.gradle
-          grep -F -- '-DUNDRAL_ENABLE_VULKAN=OFF' native/android/app/build.gradle
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -79,6 +71,14 @@ jobs:
       - name: Validate packaged Evergrove assets
         working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
         run: python3 native/tests/EvergroveIntegrationTests.py
+
+      - name: Disable Vulkan for crash-isolation build
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        shell: bash
+        run: |
+          sed -i 's/-DUNDRAL_ENABLE_VULKAN=ON/-DUNDRAL_ENABLE_VULKAN=OFF/' \
+            native/android/app/build.gradle
+          grep -F -- '-DUNDRAL_ENABLE_VULKAN=OFF' native/android/app/build.gradle
 
       - name: Build debug APK
         working-directory: undral-build/source/Games-code-only-v2-tiered-gathering/native/android
