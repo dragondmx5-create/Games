@@ -45,9 +45,21 @@ jobs:
           "ndk;29.0.14206865"
           "cmake;3.22.1"
 
-      - name: Download SDL3 Android archive
+      - name: Install SDL3 Android archive
         working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
-        run: ./native/scripts/setup_sdl.sh
+        shell: bash
+        env:
+          SDL3_VERSION: "3.4.12"
+          SDL3_ANDROID_SHA256: "21e60b78542c05afb81df015d0f8f8cb30e57fcafebaf2dbc38cb62ba92d6198"
+        run: |
+          archive="${RUNNER_TEMP}/SDL3-devel-${SDL3_VERSION}-android.zip"
+          url="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VERSION}/SDL3-devel-${SDL3_VERSION}-android.zip"
+          curl --fail --location --retry 3 --output "${archive}" "${url}"
+          echo "${SDL3_ANDROID_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p native/android/app/libs
+          unzip -p "${archive}" "SDL3-${SDL3_VERSION}.aar" \
+            > "native/android/app/libs/SDL3-${SDL3_VERSION}.aar"
+          test -s "native/android/app/libs/SDL3-${SDL3_VERSION}.aar"
 
       - name: Validate packaged Evergrove assets
         working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
