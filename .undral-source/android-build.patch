@@ -647,3 +647,163 @@
      license_file = NATIVE_ROOT / "assets" / "evergrove" / "LICENSE-QUATERNIUS-CC0.txt"
      if not license_file.is_file() or not license_file.read_text(encoding="utf-8").strip():
          raise AssertionError("Quaternius CC0 license notice is missing")
+--- a/native/android/app/src/main/AndroidManifest.xml
++++ b/native/android/app/src/main/AndroidManifest.xml
+@@ -14,6 +14,7 @@
+ 
+     <application
+         android:allowBackup="false"
++        android:appCategory="game"
+         android:extractNativeLibs="true"
+         android:fullBackupContent="false"
+         android:hardwareAccelerated="true"
+@@ -28,6 +29,7 @@
+             android:configChanges="colorMode|density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|navigation|orientation|screenLayout|screenSize|smallestScreenSize|touchscreen|uiMode"
+             android:exported="true"
+             android:launchMode="singleTask"
++            android:resizeableActivity="false"
+             android:screenOrientation="sensorLandscape">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+--- a/native/src/platform/SdlApp.cpp
++++ b/native/src/platform/SdlApp.cpp
+@@ -536,10 +536,12 @@
+ [[nodiscard]] SDL_WindowFlags window_flags_for(
+     const RendererBackend backend
+ ) noexcept {
+-  SDL_WindowFlags flags = static_cast<SDL_WindowFlags>(
+-      SDL_WINDOW_RESIZABLE |
+-      SDL_WINDOW_HIGH_PIXEL_DENSITY
++  SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
++#if !defined(SDL_PLATFORM_ANDROID)
++  flags = static_cast<SDL_WindowFlags>(
++      flags | SDL_WINDOW_RESIZABLE
+   );
++#endif
+   if (backend == RendererBackend::vulkan) {
+     flags = static_cast<SDL_WindowFlags>(
+         flags | SDL_WINDOW_VULKAN
+@@ -553,6 +555,14 @@
+     const RendererBackend backend,
+     std::string& error
+ ) {
++#if defined(SDL_PLATFORM_ANDROID)
++  // SDL otherwise maps a resizable window with no explicit hint to
++  // FULL_USER, overriding the landscape-only Android activity.
++  static_cast<void>(SDL_SetHint(
++      SDL_HINT_ORIENTATIONS,
++      "LandscapeLeft LandscapeRight"
++  ));
++#endif
+   state.window = SDL_CreateWindow(
+       "UNDRAL Online",
+       kInitialWindowWidth,
+@@ -2748,6 +2758,31 @@
+   );
+ 
+   undral::render::sort_render_items(items);
++  const std::array<undral::render::RenderPointLight, 2>
++      scene_lights{{
++          {
++              .presentation_id = 1U,
++              .position = {
++                  camera_x - 22.0F,
++                  32.0F,
++                  camera_z + 14.0F,
++              },
++              .radius = 90.0F,
++              .color = {1.0F, 0.91F, 0.76F},
++              .intensity = 2.8F,
++          },
++          {
++              .presentation_id = 2U,
++              .position = {
++                  camera_x + 18.0F,
++                  18.0F,
++                  camera_z - 12.0F,
++              },
++              .radius = 70.0F,
++              .color = {0.48F, 0.66F, 0.82F},
++              .intensity = 1.15F,
++          },
++      }};
+   const undral::render::RenderFrame frame{
+       .sequence = ++state.render_sequence,
+       .viewport_width = static_cast<std::uint32_t>(output_width),
+@@ -2768,6 +2803,7 @@
+           .shadow_strength = 0.0F,
+       },
+       .draw_items = items,
++      .point_lights = scene_lights,
+   };
+   return state.runtime_asset_renderer->submit_render_frame(frame, error);
+ }
+--- a/native/src/render_vulkan/VulkanRenderer.cpp
++++ b/native/src/render_vulkan/VulkanRenderer.cpp
+@@ -1656,7 +1656,8 @@
+       const SceneUniformData scene = build_scene_uniform_data(
+           *submitted_frame,
+           swapchain_extent.width,
+-          swapchain_extent.height
++          swapchain_extent.height,
++          pbr_v2_active ? 0.18F : 0.32F
+       );
+       std::memcpy(frame.mapped_scene, &scene, sizeof(scene));
+     }
+@@ -5697,6 +5698,13 @@
+     }};
+     const bool separate_queues =
+         family_indices[0] != family_indices[1];
++    const VkSurfaceTransformFlagBitsKHR pre_transform =
++        (
++            support.capabilities.supportedTransforms &
++            VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
++        ) != 0
++        ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
++        : support.capabilities.currentTransform;
+     VkImageUsageFlags image_usage =
+         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+     if (!config.headless_smoke_capture_path.empty()) {
+@@ -5735,7 +5743,7 @@
+                 : 0,
+         .pQueueFamilyIndices =
+             separate_queues ? family_indices.data() : nullptr,
+-        .preTransform = support.capabilities.currentTransform,
++        .preTransform = pre_transform,
+         .compositeAlpha = composite_alpha,
+         .presentMode = present_mode,
+         .clipped = VK_TRUE,
+@@ -6530,7 +6538,7 @@
+         .rasterizerDiscardEnable = VK_FALSE,
+         .polygonMode = VK_POLYGON_MODE_FILL,
+         .cullMode = cull_mode,
+-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
++        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+         .depthBiasEnable = VK_FALSE,
+         .depthBiasConstantFactor = 0.0F,
+         .depthBiasClamp = 0.0F,
+--- a/native/tests/EvergroveIntegrationTests.py
++++ b/native/tests/EvergroveIntegrationTests.py
+@@ -136,12 +136,22 @@
+         "kNaturePlacements",
+         "state.world_entities.resources",
+         "state.enemies.visual_at",
++        "SDL_HINT_ORIENTATIONS",
++        "LandscapeLeft LandscapeRight",
++        "scene_lights",
+     ):
+         assert_contains(app, integration)
+ 
+     vulkan_renderer = NATIVE_ROOT / "src" / "render_vulkan" / "VulkanRenderer.cpp"
+     assert_contains(vulkan_renderer, "create_default_material_texture")
+     assert_contains(vulkan_renderer, "texture_resource(default_material_texture)")
++    assert_contains(vulkan_renderer, "VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR")
++    assert_contains(vulkan_renderer, "VK_FRONT_FACE_COUNTER_CLOCKWISE")
++
++    android_manifest = NATIVE_ROOT / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
++    assert_contains(android_manifest, 'android:appCategory="game"')
++    assert_contains(android_manifest, 'android:screenOrientation="sensorLandscape"')
++    assert_contains(android_manifest, 'android:resizeableActivity="false"')
+ 
+     license_file = NATIVE_ROOT / "assets" / "evergrove" / "LICENSE-QUATERNIUS-CC0.txt"
+     if not license_file.is_file() or not license_file.read_text(encoding="utf-8").strip():
