@@ -489,3 +489,161 @@
    }
  #endif
    configure_smoke_mode(*state);
+--- a/native/src/render_vulkan/VulkanRenderer.cpp
++++ b/native/src/render_vulkan/VulkanRenderer.cpp
+@@ -940,7 +940,8 @@
+         !create_command_pool(error) ||
+         !create_asset_descriptor_resources(error) ||
+         !create_frame_resources(error) ||
+-        !create_swapchain_resources(error)
++        !create_swapchain_resources(error) ||
++        !create_default_material_texture(error)
+     ) {
+       shutdown();
+       return false;
+@@ -1032,6 +1033,7 @@
+       }
+       destroy_swapchain_resources();
+       clear_runtime_assets();
++      destroy_default_material_texture();
+       destroy_frame_resources();
+       destroy_asset_descriptor_resources();
+       if (command_pool != VK_NULL_HANDLE) {
+@@ -3341,18 +3343,26 @@
+     }
+     const std::uint32_t base_color_dependency =
+         payload.texture_dependencies[0];
++    const TextureResource* texture = nullptr;
+     if (
+         base_color_dependency ==
+-            render::kMissingTextureDependency ||
++        render::kMissingTextureDependency
++    ) {
++      texture = texture_resource(default_material_texture);
++      if (texture == nullptr) {
++        error = "Vulkan default material texture is unavailable";
++        return false;
++      }
++    } else if (
+         base_color_dependency >= package.dependency_count()
+     ) {
+-      error =
+-          "Material requires a loaded base-color texture";
++      error = "Material base-color dependency is out of range";
+       return false;
++    } else {
++      texture = texture_by_id(
++          package.dependency(base_color_dependency)
++      );
+     }
+-    TextureResource* texture = texture_by_id(
+-        package.dependency(base_color_dependency)
+-    );
+     if (texture == nullptr) {
+       error =
+           "Material dependency is not loaded as a texture";
+@@ -4073,6 +4083,31 @@
+     return true;
+   }
+ 
++  [[nodiscard]] bool create_default_material_texture(
++      std::string& error
++  ) {
++    static constexpr render::RuntimeAssetId kAssetId{{
++        'U', 'N', 'D', 'R', 'A', 'L', '-', 'W',
++        'H', 'I', 'T', 'E', '-', 'T', 'E', 'X',
++    }};
++    static constexpr std::array<std::uint8_t, 4> kWhitePixel{{
++        255U, 255U, 255U, 255U,
++    }};
++    const render::RawImagePayloadView payload{
++        .width = 1U,
++        .height = 1U,
++        .semantic = render::RawImageSemantic::color_srgb,
++        .pixels = kWhitePixel,
++    };
++    render::RuntimeAssetLoadResult result;
++    if (!load_raw_texture_asset(kAssetId, payload, result, error)) {
++      error = "Vulkan default material texture failed: " + error;
++      return false;
++    }
++    default_material_texture = result.texture;
++    return true;
++  }
++
+   [[nodiscard]] bool load_texture_asset(
+       const render::RuntimeAssetId& asset_id,
+       const render::RuntimeAssetPackageView& package,
+@@ -4760,12 +4795,34 @@
+         continue;
+       }
+       const render::TextureHandle handle = resource->handle;
++      if (handle == default_material_texture) {
++        continue;
++      }
+       destroy_texture_resource(*resource);
+       resource.reset();
+       static_cast<void>(texture_handles.release(handle));
+     }
+   }
+ 
++  void destroy_default_material_texture() noexcept {
++    if (!default_material_texture.valid()) {
++      return;
++    }
++    const std::size_t index = default_material_texture.index();
++    if (
++        index < texture_assets.size() &&
++        texture_assets[index] &&
++        texture_assets[index]->handle == default_material_texture
++    ) {
++      destroy_texture_resource(*texture_assets[index]);
++      texture_assets[index].reset();
++      static_cast<void>(
++          texture_handles.release(default_material_texture)
++      );
++    }
++    default_material_texture = {};
++  }
++
+   [[nodiscard]] bool create_mapped_frame_buffer(
+       const VkDeviceSize requested_bytes,
+       const VkBufferUsageFlags usage,
+@@ -7714,6 +7771,7 @@
+   render::FixedRenderHandlePool<
+       render::TextureHandle,
+       kMaximumRuntimeTextures> texture_handles;
++  render::TextureHandle default_material_texture;
+   render::FixedRenderHandlePool<
+       render::MeshHandle,
+       kMaximumRuntimeMeshes> mesh_handles;
+--- a/native/tests/EvergroveIntegrationTests.py
++++ b/native/tests/EvergroveIntegrationTests.py
+@@ -54,6 +54,16 @@
+     if kinds != Counter({builder.KIND_MATERIAL: 11, builder.KIND_MESH: 10, builder.KIND_TEXTURE: 5}):
+         raise AssertionError(f"unexpected Evergrove asset kind counts: {kinds}")
+ 
++    color_only_materials = {
++        "evergrove.material.terrain_grass",
++        "evergrove.material.terrain_path",
++        "evergrove.material.terrain_water",
++    }
++    for logical_name in color_only_materials:
++        entry = next(asset for asset in assets if asset["logicalName"] == logical_name)
++        if entry["dependencies"]:
++            raise AssertionError(f"{logical_name} must remain a valid color-only material")
++
+     for entry in assets:
+         if entry["kind"] != builder.KIND_TEXTURE:
+             continue
+@@ -129,6 +139,10 @@
+     ):
+         assert_contains(app, integration)
+ 
++    vulkan_renderer = NATIVE_ROOT / "src" / "render_vulkan" / "VulkanRenderer.cpp"
++    assert_contains(vulkan_renderer, "create_default_material_texture")
++    assert_contains(vulkan_renderer, "texture_resource(default_material_texture)")
++
+     license_file = NATIVE_ROOT / "assets" / "evergrove" / "LICENSE-QUATERNIUS-CC0.txt"
+     if not license_file.is_file() or not license_file.read_text(encoding="utf-8").strip():
+         raise AssertionError("Quaternius CC0 license notice is missing")
