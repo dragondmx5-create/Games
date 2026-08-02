@@ -1,0 +1,809 @@
+--- a/native/src/network/AuthenticatedWorldClient.cpp
++++ b/native/src/network/AuthenticatedWorldClient.cpp
+@@ -37,6 +37,7 @@
+ #else
+ #include <cerrno>
+ #include <netdb.h>
++#include <netinet/in.h>
+ #include <sys/select.h>
+ #include <sys/socket.h>
+ #include <sys/types.h>
+--- a/native/src/render/SwapchainPolicy.hpp
++++ b/native/src/render/SwapchainPolicy.hpp
+@@ -10,6 +10,8 @@
+   other,
+   rgba8_srgb,
+   bgra8_srgb,
++  rgba8_unorm,
++  bgra8_unorm,
+ };
+ 
+ enum class PresentModeClass : std::uint8_t {
+@@ -36,7 +38,7 @@
+ enum class SwapchainSelectionFailure {
+   none,
+   no_surface_formats,
+-  no_srgb_surface_format,
++  no_supported_surface_format,
+   no_present_modes,
+   fifo_present_mode_missing,
+   invalid_extent_bounds,
+--- a/native/src/render/SwapchainPolicy.cpp
++++ b/native/src/render/SwapchainPolicy.cpp
+@@ -33,6 +33,26 @@
+   if (rgba != formats.end()) {
+     return static_cast<std::size_t>(rgba - formats.begin());
+   }
++  const auto bgra_unorm = std::find(
++      formats.begin(),
++      formats.end(),
++      SurfaceFormatClass::bgra8_unorm
++  );
++  if (bgra_unorm != formats.end()) {
++    return static_cast<std::size_t>(
++        bgra_unorm - formats.begin()
++    );
++  }
++  const auto rgba_unorm = std::find(
++      formats.begin(),
++      formats.end(),
++      SurfaceFormatClass::rgba8_unorm
++  );
++  if (rgba_unorm != formats.end()) {
++    return static_cast<std::size_t>(
++        rgba_unorm - formats.begin()
++    );
++  }
+   return std::numeric_limits<std::size_t>::max();
+ }
+ 
+@@ -96,7 +116,7 @@
+       std::numeric_limits<std::size_t>::max()
+   ) {
+     selection.failure =
+-        SwapchainSelectionFailure::no_srgb_surface_format;
++        SwapchainSelectionFailure::no_supported_surface_format;
+     return selection;
+   }
+ 
+@@ -203,8 +223,8 @@
+       return "none";
+     case SwapchainSelectionFailure::no_surface_formats:
+       return "no_surface_formats";
+-    case SwapchainSelectionFailure::no_srgb_surface_format:
+-      return "no_srgb_surface_format";
++    case SwapchainSelectionFailure::no_supported_surface_format:
++      return "no_supported_surface_format";
+     case SwapchainSelectionFailure::no_present_modes:
+       return "no_present_modes";
+     case SwapchainSelectionFailure::fifo_present_mode_missing:
+--- a/native/src/render/RendererPolicy.hpp
++++ b/native/src/render/RendererPolicy.hpp
+@@ -108,7 +108,7 @@
+   graphics_queue_missing,
+   present_queue_missing,
+   swapchain_extension_missing,
+-  srgb_surface_format_missing,
++  surface_format_missing,
+   fifo_present_mode_missing,
+   depth_format_missing,
+ };
+@@ -127,7 +127,7 @@
+   bool graphics_queue = false;
+   bool present_queue = false;
+   bool swapchain_extension = false;
+-  bool srgb_surface_format = false;
++  bool supported_surface_format = false;
+   bool fifo_present_mode = false;
+   bool depth_format = false;
+   std::uint32_t optional_features = no_optional_features;
+--- a/native/src/render/RendererPolicy.cpp
++++ b/native/src/render/RendererPolicy.cpp
+@@ -288,11 +288,11 @@
+             VulkanRequirementFailure::swapchain_extension_missing,
+     };
+   }
+-  if (!snapshot.srgb_surface_format) {
++  if (!snapshot.supported_surface_format) {
+     return {
+         .tier = RendererTier::legacy,
+         .failure =
+-            VulkanRequirementFailure::srgb_surface_format_missing,
++            VulkanRequirementFailure::surface_format_missing,
+     };
+   }
+   if (!snapshot.fifo_present_mode) {
+@@ -362,8 +362,8 @@
+       return "present_queue_missing";
+     case VulkanRequirementFailure::swapchain_extension_missing:
+       return "swapchain_extension_missing";
+-    case VulkanRequirementFailure::srgb_surface_format_missing:
+-      return "srgb_surface_format_missing";
++    case VulkanRequirementFailure::surface_format_missing:
++      return "surface_format_missing";
+     case VulkanRequirementFailure::fifo_present_mode_missing:
+       return "fifo_present_mode_missing";
+     case VulkanRequirementFailure::depth_format_missing:
+--- a/native/tests/RendererPolicyTests.cpp
++++ b/native/tests/RendererPolicyTests.cpp
+@@ -34,7 +34,7 @@
+       .graphics_queue = true,
+       .present_queue = true,
+       .swapchain_extension = true,
+-      .srgb_surface_format = true,
++      .supported_surface_format = true,
+       .fifo_present_mode = true,
+       .depth_format = true,
+       .optional_features =
+@@ -192,14 +192,14 @@
+   );
+ 
+   capabilities = baseline_capabilities();
+-  capabilities.srgb_surface_format = false;
++  capabilities.supported_surface_format = false;
+   expect_true(
+       undral::render::evaluate_vulkan_capabilities(
+           capabilities
+       ).failure ==
+           VulkanRequirementFailure::
+-              srgb_surface_format_missing,
+-      "missing sRGB surface format is reported"
++              surface_format_missing,
++      "missing supported surface format is reported"
+   );
+ 
+   capabilities = baseline_capabilities();
+--- a/native/tests/RendererInfrastructureTests.cpp
++++ b/native/tests/RendererInfrastructureTests.cpp
+@@ -346,6 +346,19 @@
+           selection.present_mode_index == 0,
+       "mailbox is selected only when policy explicitly requests it"
+   );
++
++  constexpr std::array android_formats{
++      SurfaceFormatClass::other,
++      SurfaceFormatClass::rgba8_unorm,
++      SurfaceFormatClass::bgra8_unorm,
++  };
++  input = baseline_swapchain_input(android_formats, modes);
++  selection = undral::render::select_swapchain(input);
++  expect_true(
++      selection.valid() &&
++          selection.surface_format_index == 2,
++      "Android-compatible BGRA UNORM is accepted when sRGB is absent"
++  );
+ }
+ 
+ void test_swapchain_extent_and_image_bounds() {
+@@ -402,8 +415,8 @@
+   auto input = baseline_swapchain_input(bad_formats, fifo);
+   expect_true(
+       undral::render::select_swapchain(input).failure ==
+-          SwapchainSelectionFailure::no_srgb_surface_format,
+-      "missing sRGB format has a stable failure"
++          SwapchainSelectionFailure::no_supported_surface_format,
++      "missing supported format has a stable failure"
+   );
+ 
+   input = baseline_swapchain_input(good_formats, mailbox);
+--- a/native/src/render_vulkan/VulkanRenderer.cpp
++++ b/native/src/render_vulkan/VulkanRenderer.cpp
+@@ -449,9 +449,9 @@
+     case VK_FORMAT_R8G8B8A8_SRGB:
+       return "R8G8B8A8_SRGB";
+     case VK_FORMAT_B8G8R8A8_UNORM:
+-      return "B8G8R8A8_UNORM_HEADLESS_SMOKE";
++      return "B8G8R8A8_UNORM";
+     case VK_FORMAT_R8G8B8A8_UNORM:
+-      return "R8G8B8A8_UNORM_HEADLESS_SMOKE";
++      return "R8G8B8A8_UNORM";
+     default:
+       return "unsupported";
+   }
+@@ -2189,10 +2189,14 @@
+         .graphics_queue = families.graphics.has_value(),
+         .present_queue = families.present.has_value(),
+         .swapchain_extension = swapchain_extension,
+-        .srgb_surface_format =
++        .supported_surface_format =
+             has_srgb_surface_format(support.formats) ||
+             (
+-                !config.headless_smoke_capture_path.empty() &&
++                (
++                    config.platform ==
++                        render::RendererPlatform::android ||
++                    !config.headless_smoke_capture_path.empty()
++                ) &&
+                 has_rgba8_unorm_surface_format(
+                     support.formats
+                 )
+@@ -2210,7 +2214,8 @@
+           << "': graphics=" << capabilities.graphics_queue
+           << ", present=" << capabilities.present_queue
+           << ", swapchain=" << capabilities.swapchain_extension
+-          << ", srgb=" << capabilities.srgb_surface_format
++          << ", surfaceFormat="
++          << capabilities.supported_surface_format
+           << ", fifo=" << capabilities.fifo_present_mode
+           << ", depth=" << capabilities.depth_format
+           << ", decision=" << render::to_string(decision.failure)
+@@ -2284,10 +2289,33 @@
+     if (physical_device == VK_NULL_HANDLE) {
+       error =
+           "No Vulkan 1.1 device satisfies the graphics, "
+-          "presentation, sRGB, FIFO, depth-format, and "
++          "presentation, supported RGBA8 surface, FIFO, "
++          "depth-format, and "
+           "VK_KHR_swapchain baseline";
+       return false;
+     }
++    auto get_physical_device_properties_2 =
++        reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
++            vkGetInstanceProcAddr(
++                instance,
++                "vkGetPhysicalDeviceProperties2"
++            )
++        );
++    if (get_physical_device_properties_2 == nullptr) {
++      get_physical_device_properties_2 =
++          reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
++              vkGetInstanceProcAddr(
++                  instance,
++                  "vkGetPhysicalDeviceProperties2KHR"
++              )
++          );
++    }
++    if (get_physical_device_properties_2 == nullptr) {
++      error =
++          "Vulkan loader does not expose physical-device "
++          "properties2";
++      return false;
++    }
+     VkPhysicalDeviceProperties2 properties{
+         .sType =
+             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+@@ -2297,7 +2325,7 @@
+     physical_device_ids.sType =
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+     physical_device_ids.pNext = nullptr;
+-    vkGetPhysicalDeviceProperties2(
++    get_physical_device_properties_2(
+         physical_device,
+         &properties
+     );
+@@ -3663,13 +3691,26 @@
+       render::RuntimeAssetLoadResult& result,
+       std::string& error
+   ) {
+-    const VkFormat image_format =
++    VkFormat image_format =
+         payload.semantic == render::RawImageSemantic::color_srgb
+         ? VK_FORMAT_R8G8B8A8_SRGB
+         : VK_FORMAT_R8G8B8A8_UNORM;
+     if (!format_supports_sampled_transfer(physical_device, image_format)) {
+-      error = "RGBA8 runtime texture format is not supported";
+-      return false;
++      if (
++          payload.semantic == render::RawImageSemantic::color_srgb &&
++          format_supports_sampled_transfer(
++              physical_device,
++              VK_FORMAT_R8G8B8A8_UNORM
++          )
++      ) {
++        image_format = VK_FORMAT_R8G8B8A8_UNORM;
++        std::cerr
++            << "Vulkan sRGB texture format unavailable; using "
++               "RGBA8 UNORM compatibility storage\n";
++      } else {
++        error = "RGBA8 runtime texture format is not supported";
++        return false;
++      }
+     }
+ 
+     VkBuffer staging_buffer = VK_NULL_HANDLE;
+@@ -4017,7 +4058,7 @@
+     texture_assets[handle->index()] = std::move(resource);
+     result.texture = *handle;
+     texture_transcode_formats.insert(
+-        payload.semantic == render::RawImageSemantic::color_srgb
++        image_format == VK_FORMAT_R8G8B8A8_SRGB
+         ? "RGBA8_SRGB"
+         : "RGBA8_UNORM"
+     );
+@@ -5406,21 +5447,30 @@
+             render::SurfaceFormatClass::rgba8_srgb
+         );
+       } else if (
+-          !config.headless_smoke_capture_path.empty() &&
++          (
++              config.platform ==
++                  render::RendererPlatform::android ||
++              !config.headless_smoke_capture_path.empty()
++          ) &&
+           format.format == VK_FORMAT_B8G8R8A8_UNORM
+       ) {
+-        // VK_EXT_headless_surface commonly exposes only UNORM.
+-        // This explicit smoke-only path still exercises the real
+-        // swapchain, shaders, descriptors, and GPU asset uploads.
++        // Android implementations commonly expose UNORM swapchain
++        // formats with the sRGB nonlinear color space. Prefer true
++        // sRGB above, but keep this mandatory mobile compatibility
++        // path available.
+         format_classes.push_back(
+-            render::SurfaceFormatClass::bgra8_srgb
++            render::SurfaceFormatClass::bgra8_unorm
+         );
+       } else if (
+-          !config.headless_smoke_capture_path.empty() &&
++          (
++              config.platform ==
++                  render::RendererPlatform::android ||
++              !config.headless_smoke_capture_path.empty()
++          ) &&
+           format.format == VK_FORMAT_R8G8B8A8_UNORM
+       ) {
+         format_classes.push_back(
+-            render::SurfaceFormatClass::rgba8_srgb
++            render::SurfaceFormatClass::rgba8_unorm
+         );
+       } else {
+         format_classes.push_back(
+--- a/native/src/platform/SdlApp.cpp
++++ b/native/src/platform/SdlApp.cpp
+@@ -599,6 +599,38 @@
+ }
+ 
+ #if UNDRAL_HAS_VULKAN
++[[nodiscard]] bool switch_to_sdl2d_fallback(
++    AppState& state,
++    const std::string_view phase,
++    const std::string& vulkan_error,
++    std::string& error
++) {
++  release_renderer_window(state);
++  std::string fallback_error;
++  if (
++      !create_application_window(
++          state,
++          RendererBackend::sdl2d,
++          fallback_error
++      ) ||
++      !initialize_sdl2d_renderer(state, fallback_error)
++  ) {
++    release_renderer_window(state);
++    error =
++        "Vulkan " + std::string(phase) + " failed: " +
++        vulkan_error + "; SDL2D fallback failed: " +
++        fallback_error;
++    return false;
++  }
++  error.clear();
++  const std::string notice =
++      "[SYSTEM] Vulkan fallback (" + std::string(phase) +
++      "): " + vulkan_error;
++  undral::ui::push_chat_line(state.ui, notice);
++  SDL_Log("%s", notice.c_str());
++  return true;
++}
++
+ [[nodiscard]] VulkanRendererConfig vulkan_renderer_config() {
+   VulkanRendererConfig config;
+ #if defined(SDL_PLATFORM_ANDROID)
+@@ -711,6 +743,10 @@
+         "Vulkan startup failed; selecting SDL2D fallback: %s",
+         vulkan_error.c_str()
+     );
++    undral::ui::push_chat_line(
++        state.ui,
++        "[SYSTEM] Vulkan startup fallback: " + vulkan_error
++    );
+   } else if (
+       startup.fallback_reason !=
+       undral::render::RendererFallbackReason::none
+@@ -2872,25 +2908,21 @@
+     );
+     if (
+         vulkan != nullptr &&
+-        vulkan->legacy_fallback_requested() &&
+         undral::render::permits_legacy_fallback(
+             state.renderer_preference
+         )
+     ) {
+       SDL_Log(
+-          "Vulkan device recovery failed; selecting SDL2D: %s",
++          "Vulkan frame failed; selecting SDL2D: %s",
+           error.c_str()
+       );
+-      release_renderer_window(state);
+-      error.clear();
+-      if (
+-          !create_application_window(
++      const std::string vulkan_error = error;
++      if (!switch_to_sdl2d_fallback(
+               state,
+-              RendererBackend::sdl2d,
++              "frame",
++              vulkan_error,
+               error
+-          ) ||
+-          !initialize_sdl2d_renderer(state, error)
+-      ) {
++          )) {
+         SDL_Log(
+             "SDL2D recovery fallback failed: %s",
+             error.c_str()
+@@ -2941,6 +2973,19 @@
+           "Vulkan device restart asset reload failed: %s",
+           error.c_str()
+       );
++      if (
++          undral::render::permits_legacy_fallback(
++              state.renderer_preference
++          )
++      ) {
++        const std::string vulkan_error = error;
++        return switch_to_sdl2d_fallback(
++            state,
++            "asset reload",
++            vulkan_error,
++            error
++        );
++      }
+       return false;
+     }
+   }
+@@ -3014,10 +3059,32 @@
+         "Runtime asset initialization failed: %s",
+         renderer_error.c_str()
+     );
+-    release_renderer_window(*state);
+-    delete state;
+-    SDL_Quit();
+-    return SDL_APP_FAILURE;
++    if (
++        !undral::render::permits_legacy_fallback(
++            state->renderer_preference
++        )
++    ) {
++      release_renderer_window(*state);
++      delete state;
++      SDL_Quit();
++      return SDL_APP_FAILURE;
++    }
++    const std::string vulkan_error = renderer_error;
++    if (!switch_to_sdl2d_fallback(
++            *state,
++            "runtime assets",
++            vulkan_error,
++            renderer_error
++        )) {
++      SDL_Log(
++          "Runtime asset fallback failed: %s",
++          renderer_error.c_str()
++      );
++      release_renderer_window(*state);
++      delete state;
++      SDL_Quit();
++      return SDL_APP_FAILURE;
++    }
+   }
+ #endif
+   configure_smoke_mode(*state);
+--- a/native/src/render_vulkan/VulkanRenderer.cpp
++++ b/native/src/render_vulkan/VulkanRenderer.cpp
+@@ -940,7 +940,8 @@
+         !create_command_pool(error) ||
+         !create_asset_descriptor_resources(error) ||
+         !create_frame_resources(error) ||
+-        !create_swapchain_resources(error)
++        !create_swapchain_resources(error) ||
++        !create_default_material_texture(error)
+     ) {
+       shutdown();
+       return false;
+@@ -1032,6 +1033,7 @@
+       }
+       destroy_swapchain_resources();
+       clear_runtime_assets();
++      destroy_default_material_texture();
+       destroy_frame_resources();
+       destroy_asset_descriptor_resources();
+       if (command_pool != VK_NULL_HANDLE) {
+@@ -3341,18 +3343,26 @@
+     }
+     const std::uint32_t base_color_dependency =
+         payload.texture_dependencies[0];
++    const TextureResource* texture = nullptr;
+     if (
+         base_color_dependency ==
+-            render::kMissingTextureDependency ||
++        render::kMissingTextureDependency
++    ) {
++      texture = texture_resource(default_material_texture);
++      if (texture == nullptr) {
++        error = "Vulkan default material texture is unavailable";
++        return false;
++      }
++    } else if (
+         base_color_dependency >= package.dependency_count()
+     ) {
+-      error =
+-          "Material requires a loaded base-color texture";
++      error = "Material base-color dependency is out of range";
+       return false;
++    } else {
++      texture = texture_by_id(
++          package.dependency(base_color_dependency)
++      );
+     }
+-    TextureResource* texture = texture_by_id(
+-        package.dependency(base_color_dependency)
+-    );
+     if (texture == nullptr) {
+       error =
+           "Material dependency is not loaded as a texture";
+@@ -4073,6 +4083,31 @@
+     return true;
+   }
+ 
++  [[nodiscard]] bool create_default_material_texture(
++      std::string& error
++  ) {
++    static constexpr render::RuntimeAssetId kAssetId{{
++        'U', 'N', 'D', 'R', 'A', 'L', '-', 'W',
++        'H', 'I', 'T', 'E', '-', 'T', 'E', 'X',
++    }};
++    static constexpr std::array<std::uint8_t, 4> kWhitePixel{{
++        255U, 255U, 255U, 255U,
++    }};
++    const render::RawImagePayloadView payload{
++        .width = 1U,
++        .height = 1U,
++        .semantic = render::RawImageSemantic::color_srgb,
++        .pixels = kWhitePixel,
++    };
++    render::RuntimeAssetLoadResult result;
++    if (!load_raw_texture_asset(kAssetId, payload, result, error)) {
++      error = "Vulkan default material texture failed: " + error;
++      return false;
++    }
++    default_material_texture = result.texture;
++    return true;
++  }
++
+   [[nodiscard]] bool load_texture_asset(
+       const render::RuntimeAssetId& asset_id,
+       const render::RuntimeAssetPackageView& package,
+@@ -4760,12 +4795,34 @@
+         continue;
+       }
+       const render::TextureHandle handle = resource->handle;
++      if (handle == default_material_texture) {
++        continue;
++      }
+       destroy_texture_resource(*resource);
+       resource.reset();
+       static_cast<void>(texture_handles.release(handle));
+     }
+   }
+ 
++  void destroy_default_material_texture() noexcept {
++    if (!default_material_texture.valid()) {
++      return;
++    }
++    const std::size_t index = default_material_texture.index();
++    if (
++        index < texture_assets.size() &&
++        texture_assets[index] &&
++        texture_assets[index]->handle == default_material_texture
++    ) {
++      destroy_texture_resource(*texture_assets[index]);
++      texture_assets[index].reset();
++      static_cast<void>(
++          texture_handles.release(default_material_texture)
++      );
++    }
++    default_material_texture = {};
++  }
++
+   [[nodiscard]] bool create_mapped_frame_buffer(
+       const VkDeviceSize requested_bytes,
+       const VkBufferUsageFlags usage,
+@@ -7714,6 +7771,7 @@
+   render::FixedRenderHandlePool<
+       render::TextureHandle,
+       kMaximumRuntimeTextures> texture_handles;
++  render::TextureHandle default_material_texture;
+   render::FixedRenderHandlePool<
+       render::MeshHandle,
+       kMaximumRuntimeMeshes> mesh_handles;
+--- a/native/tests/EvergroveIntegrationTests.py
++++ b/native/tests/EvergroveIntegrationTests.py
+@@ -54,6 +54,16 @@
+     if kinds != Counter({builder.KIND_MATERIAL: 11, builder.KIND_MESH: 10, builder.KIND_TEXTURE: 5}):
+         raise AssertionError(f"unexpected Evergrove asset kind counts: {kinds}")
+ 
++    color_only_materials = {
++        "evergrove.material.terrain_grass",
++        "evergrove.material.terrain_path",
++        "evergrove.material.terrain_water",
++    }
++    for logical_name in color_only_materials:
++        entry = next(asset for asset in assets if asset["logicalName"] == logical_name)
++        if entry["dependencies"]:
++            raise AssertionError(f"{logical_name} must remain a valid color-only material")
++
+     for entry in assets:
+         if entry["kind"] != builder.KIND_TEXTURE:
+             continue
+@@ -129,6 +139,10 @@
+     ):
+         assert_contains(app, integration)
+ 
++    vulkan_renderer = NATIVE_ROOT / "src" / "render_vulkan" / "VulkanRenderer.cpp"
++    assert_contains(vulkan_renderer, "create_default_material_texture")
++    assert_contains(vulkan_renderer, "texture_resource(default_material_texture)")
++
+     license_file = NATIVE_ROOT / "assets" / "evergrove" / "LICENSE-QUATERNIUS-CC0.txt"
+     if not license_file.is_file() or not license_file.read_text(encoding="utf-8").strip():
+         raise AssertionError("Quaternius CC0 license notice is missing")
+--- a/native/android/app/src/main/AndroidManifest.xml
++++ b/native/android/app/src/main/AndroidManifest.xml
+@@ -14,6 +14,7 @@
+ 
+     <application
+         android:allowBackup="false"
++        android:appCategory="game"
+         android:extractNativeLibs="true"
+         android:fullBackupContent="false"
+         android:hardwareAccelerated="true"
+@@ -28,6 +29,7 @@
+             android:configChanges="colorMode|density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|navigation|orientation|screenLayout|screenSize|smallestScreenSize|touchscreen|uiMode"
+             android:exported="true"
+             android:launchMode="singleTask"
++            android:resizeableActivity="false"
+             android:screenOrientation="sensorLandscape">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+--- a/native/src/platform/SdlApp.cpp
++++ b/native/src/platform/SdlApp.cpp
+@@ -536,10 +536,12 @@
+ [[nodiscard]] SDL_WindowFlags window_flags_for(
+     const RendererBackend backend
+ ) noexcept {
+-  SDL_WindowFlags flags = static_cast<SDL_WindowFlags>(
+-      SDL_WINDOW_RESIZABLE |
+-      SDL_WINDOW_HIGH_PIXEL_DENSITY
++  SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
++#if !defined(SDL_PLATFORM_ANDROID)
++  flags = static_cast<SDL_WindowFlags>(
++      flags | SDL_WINDOW_RESIZABLE
+   );
++#endif
+   if (backend == RendererBackend::vulkan) {
+     flags = static_cast<SDL_WindowFlags>(
+         flags | SDL_WINDOW_VULKAN
+@@ -553,6 +555,14 @@
+     const RendererBackend backend,
+     std::string& error
+ ) {
++#if defined(SDL_PLATFORM_ANDROID)
++  // SDL otherwise maps a resizable window with no explicit hint to
++  // FULL_USER, overriding the landscape-only Android activity.
++  static_cast<void>(SDL_SetHint(
++      SDL_HINT_ORIENTATIONS,
++      "LandscapeLeft LandscapeRight"
++  ));
++#endif
+   state.window = SDL_CreateWindow(
+       "UNDRAL Online",
+       kInitialWindowWidth,
+@@ -2748,6 +2758,31 @@
+   );
+ 
+   undral::render::sort_render_items(items);
++  const std::array<undral::render::RenderPointLight, 2>
++      scene_lights{{
++          {
++              .presentation_id = 1U,
++              .position = {
++                  camera_x - 22.0F,
++                  32.0F,
++                  camera_z + 14.0F,
++              },
++              .radius = 90.0F,
++              .color = {1.0F, 0.91F, 0.76F},
++              .intensity = 2.8F,
++          },
++          {
++              .presentation_id = 2U,
++              .position = {
++                  camera_x + 18.0F,
++                  18.0F,
++                  camera_z - 12.0F,
++              },
++              .radius = 70.0F,
++              .color = {0.48F, 0.66F, 0.82F},
++              .intensity = 1.15F,
++          },
++      }};
+   const undral::render::RenderFrame frame{
+       .sequence = ++state.render_sequence,
+       .viewport_width = static_cast<std::uint32_t>(output_width),
+@@ -2768,6 +2803,7 @@
+           .shadow_strength = 0.0F,
+       },
+       .draw_items = items,
++      .point_lights = scene_lights,
+   };
+   return state.runtime_asset_renderer->submit_render_frame(frame, error);
+ }
+--- a/native/src/render_vulkan/VulkanRenderer.cpp
++++ b/native/src/render_vulkan/VulkanRenderer.cpp
+@@ -1656,7 +1656,8 @@
+       const SceneUniformData scene = build_scene_uniform_data(
+           *submitted_frame,
+           swapchain_extent.width,
+-          swapchain_extent.height
++          swapchain_extent.height,
++          pbr_v2_active ? 0.18F : 0.32F
+       );
+       std::memcpy(frame.mapped_scene, &scene, sizeof(scene));
+     }
+@@ -5697,6 +5698,13 @@
+     }};
+     const bool separate_queues =
+         family_indices[0] != family_indices[1];
++    const VkSurfaceTransformFlagBitsKHR pre_transform =
++        (
++            support.capabilities.supportedTransforms &
++            VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
++        ) != 0
++        ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
++        : support.capabilities.currentTransform;
+     VkImageUsageFlags image_usage =
+         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+     if (!config.headless_smoke_capture_path.empty()) {
+@@ -5735,7 +5743,7 @@
+                 : 0,
+         .pQueueFamilyIndices =
+             separate_queues ? family_indices.data() : nullptr,
+-        .preTransform = support.capabilities.currentTransform,
++        .preTransform = pre_transform,
+         .compositeAlpha = composite_alpha,
+         .presentMode = present_mode,
+         .clipped = VK_TRUE,
+@@ -6530,7 +6538,7 @@
+         .rasterizerDiscardEnable = VK_FALSE,
+         .polygonMode = VK_POLYGON_MODE_FILL,
+         .cullMode = cull_mode,
+-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
++        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+         .depthBiasEnable = VK_FALSE,
+         .depthBiasConstantFactor = 0.0F,
+         .depthBiasClamp = 0.0F,
+--- a/native/tests/EvergroveIntegrationTests.py
++++ b/native/tests/EvergroveIntegrationTests.py
+@@ -136,12 +136,22 @@
+         "kNaturePlacements",
+         "state.world_entities.resources",
+         "state.enemies.visual_at",
++        "SDL_HINT_ORIENTATIONS",
++        "LandscapeLeft LandscapeRight",
++        "scene_lights",
+     ):
+         assert_contains(app, integration)
+ 
+     vulkan_renderer = NATIVE_ROOT / "src" / "render_vulkan" / "VulkanRenderer.cpp"
+     assert_contains(vulkan_renderer, "create_default_material_texture")
+     assert_contains(vulkan_renderer, "texture_resource(default_material_texture)")
++    assert_contains(vulkan_renderer, "VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR")
++    assert_contains(vulkan_renderer, "VK_FRONT_FACE_COUNTER_CLOCKWISE")
++
++    android_manifest = NATIVE_ROOT / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
++    assert_contains(android_manifest, 'android:appCategory="game"')
++    assert_contains(android_manifest, 'android:screenOrientation="sensorLandscape"')
++    assert_contains(android_manifest, 'android:resizeableActivity="false"')
+ 
+     license_file = NATIVE_ROOT / "assets" / "evergrove" / "LICENSE-QUATERNIUS-CC0.txt"
+     if not license_file.is_file() or not license_file.read_text(encoding="utf-8").strip():

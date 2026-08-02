@@ -1,0 +1,120 @@
+name: Build UNDRAL Android APK
+
+on:
+  push:
+    branches:
+      - agent/undral-native-android
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android — Vulkan Compatibility APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct UNDRAL source archive
+        shell: bash
+        run: |
+          mkdir -p undral-build
+          cat .undral-source/source.zip.b64.part-* \
+            | base64 --decode > undral-build/source.zip
+          unzip -q undral-build/source.zip -d undral-build/source
+          test -f undral-build/source/Games-code-only-v2-tiered-gathering/native/android/settings.gradle
+
+      - name: Apply Android build portability fixes
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        shell: bash
+        run: >-
+          patch --batch --forward -p1
+          < "${GITHUB_WORKSPACE}/.undral-source/android-build.patch"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.13"
+
+      - name: Install Android native toolchain
+        run: >-
+          sdkmanager
+          "platforms;android-36"
+          "build-tools;35.0.0"
+          "ndk;29.0.14206865"
+          "cmake;3.22.1"
+
+      - name: Install SDL3 Android archive
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        shell: bash
+        env:
+          SDL3_VERSION: "3.4.12"
+          SDL3_ANDROID_SHA256: "21e60b78542c05afb81df015d0f8f8cb30e57fcafebaf2dbc38cb62ba92d6198"
+        run: |
+          archive="${RUNNER_TEMP}/SDL3-devel-${SDL3_VERSION}-android.zip"
+          url="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VERSION}/SDL3-devel-${SDL3_VERSION}-android.zip"
+          curl --fail --location --retry 3 --output "${archive}" "${url}"
+          echo "${SDL3_ANDROID_SHA256}  ${archive}" | sha256sum --check --strict
+          mkdir -p native/android/app/libs
+          unzip -p "${archive}" "SDL3-${SDL3_VERSION}.aar" \
+            > "native/android/app/libs/SDL3-${SDL3_VERSION}.aar"
+          test -s "native/android/app/libs/SDL3-${SDL3_VERSION}.aar"
+
+      - name: Validate packaged Evergrove assets
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        run: python3 native/tests/EvergroveIntegrationTests.py
+
+      - name: Validate Vulkan compatibility policies
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        shell: bash
+        run: |
+          build_dir="${RUNNER_TEMP}/undral-policy-tests"
+          mkdir -p "${build_dir}"
+          g++ -std=c++20 -Wall -Wextra -Wpedantic -Inative/src \
+            native/tests/RendererPolicyTests.cpp \
+            native/src/render/RendererPolicy.cpp \
+            native/src/render/RendererMemory.cpp \
+            -o "${build_dir}/renderer-policy-tests"
+          "${build_dir}/renderer-policy-tests"
+          g++ -std=c++20 -Wall -Wextra -Wpedantic -Inative/src \
+            native/tests/RendererInfrastructureTests.cpp \
+            native/src/render/RendererDiagnostics.cpp \
+            native/src/render/RendererMemory.cpp \
+            native/src/render/RendererPolicy.cpp \
+            native/src/render/SwapchainPolicy.cpp \
+            -o "${build_dir}/renderer-infrastructure-tests"
+          "${build_dir}/renderer-infrastructure-tests"
+
+      - name: Build debug APK
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering/native/android
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          apk="undral-build/source/Games-code-only-v2-tiered-gathering/native/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "${apk}"
+          mkdir -p dist
+          cp "${apk}" dist/UNDRAL-Evergrove-vulkan-compat-debug.apk
+          sha256sum dist/UNDRAL-Evergrove-vulkan-compat-debug.apk \
+            > dist/UNDRAL-Evergrove-vulkan-compat-debug.apk.sha256
+          verify_dir="${RUNNER_TEMP}/undral-apk-verify"
+          mkdir -p "${verify_dir}"
+          unzip -q "${apk}" 'lib/*/libmain.so' -d "${verify_dir}"
+          readelf -d "${verify_dir}/lib/arm64-v8a/libmain.so" \
+            | grep -F '[libvulkan.so]'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: undral-evergrove-android-vulkan-compat-debug
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
