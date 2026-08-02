@@ -1,0 +1,75 @@
+name: Build UNDRAL Android APK
+
+on:
+  push:
+    branches:
+      - agent/undral-native-android
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android — Vulkan NDK APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct UNDRAL source archive
+        shell: bash
+        run: |
+          mkdir -p undral-build
+          cat .undral-source/source.zip.b64.part-* \
+            | base64 --decode > undral-build/source.zip
+          unzip -q undral-build/source.zip -d undral-build/source
+          test -f undral-build/source/Games-code-only-v2-tiered-gathering/native/android/settings.gradle
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.13"
+
+      - name: Install Android native toolchain
+        run: >-
+          sdkmanager
+          "platforms;android-36"
+          "build-tools;35.0.0"
+          "ndk;29.0.14206865"
+          "cmake;3.22.1"
+
+      - name: Download SDL3 Android archive
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        run: ./native/scripts/setup_sdl.sh
+
+      - name: Validate packaged Evergrove assets
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
+        run: python3 native/tests/EvergroveIntegrationTests.py
+
+      - name: Build debug APK
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering/native/android
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Verify and stage APK
+        shell: bash
+        run: |
+          apk="undral-build/source/Games-code-only-v2-tiered-gathering/native/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "${apk}"
+          mkdir -p dist
+          cp "${apk}" dist/UNDRAL-Evergrove-debug.apk
+          sha256sum dist/UNDRAL-Evergrove-debug.apk \
+            > dist/UNDRAL-Evergrove-debug.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: undral-evergrove-android-debug
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
