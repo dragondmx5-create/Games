@@ -1,0 +1,52 @@
+diff --git a/native/src/network/AuthenticatedWorldClient.cpp b/native/src/network/AuthenticatedWorldClient.cpp
+--- a/native/src/network/AuthenticatedWorldClient.cpp
++++ b/native/src/network/AuthenticatedWorldClient.cpp
+@@ -36,6 +36,7 @@ constexpr NativeSocket kInvalidSocket = INVALID_SOCKET;
+ #else
+ #include <cerrno>
+ #include <netdb.h>
++#include <netinet/in.h>
+ #include <sys/select.h>
+ #include <sys/socket.h>
+ #include <sys/types.h>
+diff --git a/native/src/render_vulkan/VulkanRenderer.cpp b/native/src/render_vulkan/VulkanRenderer.cpp
+--- a/native/src/render_vulkan/VulkanRenderer.cpp
++++ b/native/src/render_vulkan/VulkanRenderer.cpp
+@@ -2286,6 +2286,28 @@ class VulkanRenderer::Impl final {
+           "VK_KHR_swapchain baseline";
+       return false;
+     }
++    auto get_physical_device_properties_2 =
++        reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
++            vkGetInstanceProcAddr(
++                instance,
++                "vkGetPhysicalDeviceProperties2"
++            )
++        );
++    if (get_physical_device_properties_2 == nullptr) {
++      get_physical_device_properties_2 =
++          reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
++              vkGetInstanceProcAddr(
++                  instance,
++                  "vkGetPhysicalDeviceProperties2KHR"
++              )
++          );
++    }
++    if (get_physical_device_properties_2 == nullptr) {
++      error =
++          "Vulkan loader does not expose physical-device "
++          "properties2";
++      return false;
++    }
+     VkPhysicalDeviceProperties2 properties{
+         .sType =
+             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+@@ -2297,7 +2319,7 @@ class VulkanRenderer::Impl final {
+     physical_device_ids.sType =
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+     physical_device_ids.pNext = nullptr;
+-    vkGetPhysicalDeviceProperties2(
++    get_physical_device_properties_2(
+         physical_device,
+         &properties
+     );

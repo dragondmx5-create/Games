@@ -26,24 +26,12 @@ jobs:
           unzip -q undral-build/source.zip -d undral-build/source
           test -f undral-build/source/Games-code-only-v2-tiered-gathering/native/android/settings.gradle
 
-      - name: Apply Android socket portability fix
+      - name: Apply Android build portability fixes
+        working-directory: undral-build/source/Games-code-only-v2-tiered-gathering
         shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path(
-              "undral-build/source/Games-code-only-v2-tiered-gathering/"
-              "native/src/network/AuthenticatedWorldClient.cpp"
-          )
-          text = path.read_text()
-          needle = "#include <netdb.h>\n"
-          replacement = needle + "#include <netinet/in.h>\n"
-          if replacement not in text:
-              if needle not in text:
-                  raise SystemExit("socket include anchor not found")
-              path.write_text(text.replace(needle, replacement, 1))
-          PY
+        run: >-
+          patch --batch --forward -p1
+          < "${GITHUB_WORKSPACE}/.undral-source/android-build.patch"
 
       - uses: actions/setup-java@v4
         with:
